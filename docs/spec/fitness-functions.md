@@ -58,4 +58,4 @@ Severity: `block` (fails the runner) / `warn` (surfaces only).
 
 - FF-004 covers the core `Chain.Emit` path. IPC-specific JSON number preservation and
   fractional-number error mapping are handled separately by
-  [task 003](../tasks/backlog/003-normalize-ipc-json-numbers.md).
+  [task 003](../tasks/completed/003-normalize-ipc-json-numbers.md).

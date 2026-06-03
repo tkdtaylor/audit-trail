@@ -2,7 +2,11 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	"net"
 	"os"
 )
@@ -33,8 +37,8 @@ func handleConn(conn net.Conn, chain *Chain) {
 	if err != nil && len(line) == 0 {
 		return
 	}
-	var req map[string]any
-	if err := json.Unmarshal(line, &req); err != nil {
+	req, err := decodeIPCRequest(line)
+	if err != nil {
 		writeJSON(conn, errShape("bad_request", err.Error()))
 		return
 	}
@@ -45,9 +49,14 @@ func handleConn(conn net.Conn, chain *Chain) {
 			writeJSON(conn, errShape("bad_request", "missing event"))
 			return
 		}
+		event, err = normalizeJSONNumbers(event, "event")
+		if err != nil {
+			writeJSON(conn, errShape("bad_request", err.Error()))
+			return
+		}
 		out, err := chain.Emit(event)
 		if err != nil {
-			writeJSON(conn, errShape("internal", err.Error()))
+			writeJSON(conn, errShape(emitErrorCode(err), err.Error()))
 			return
 		}
 		writeJSON(conn, out)
@@ -57,6 +66,76 @@ func handleConn(conn net.Conn, chain *Chain) {
 		writeJSON(conn, map[string]any{"ok": true})
 	default:
 		writeJSON(conn, errShape("unknown_op", "unsupported op"))
+	}
+}
+
+func emitErrorCode(err error) string {
+	if errors.Is(err, errInvalidAuditEvent) {
+		return "bad_request"
+	}
+	return "internal"
+}
+
+func decodeIPCRequest(line []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(line))
+	dec.UseNumber()
+
+	var req map[string]any
+	if err := dec.Decode(&req); err != nil {
+		return nil, err
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("multiple JSON values in request")
+	}
+	return req, nil
+}
+
+func normalizeJSONNumbers(event map[string]any, path string) (map[string]any, error) {
+	out := make(map[string]any, len(event))
+	for k, v := range event {
+		normalized, err := normalizeJSONNumberValue(v, path+"."+k)
+		if err != nil {
+			return nil, err
+		}
+		out[k] = normalized
+	}
+	return out, nil
+}
+
+func normalizeJSONNumberValue(v any, path string) (any, error) {
+	switch x := v.(type) {
+	case json.Number:
+		i, err := x.Int64()
+		if err != nil {
+			return nil, fmt.Errorf("audited event rejects non-integer JSON number at %s (%q)", path, x.String())
+		}
+		return i, nil
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, child := range x {
+			normalized, err := normalizeJSONNumberValue(child, path+"."+k)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = normalized
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(x))
+		for i, child := range x {
+			normalized, err := normalizeJSONNumberValue(child, fmt.Sprintf("%s[%d]", path, i))
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalized
+		}
+		return out, nil
+	default:
+		return v, nil
 	}
 }
 

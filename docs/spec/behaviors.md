@@ -21,10 +21,13 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   `decision` is omitted from the event when the flag is empty.
 - **Validation:** Audited event inputs copied into the record (`ts`, `actor`, `action`,
   `target`, `decision`, `refs`, `context`) must not contain Go `float32` or `float64` values.
-  `refs` and `context` are checked recursively before hashing or appending.
+  `refs` and `context` are checked recursively before hashing or appending. IPC decodes JSON
+  numbers with preservation enabled, normalizes integer JSON numbers to `int64`, and rejects
+  fractional JSON numbers before calling `Chain.Emit`.
 - **Failure modes:** Float validation errors name the rejected location and return before any
-  record is appended. Filesystem errors (open/write/close) propagate as an error (CLI: exit 1
-  with `error:`; IPC: `{error:{code:"internal",…}}`).
+  record is appended. IPC event validation failures return
+  `{error:{code:"bad_request",…,retryable:false}}`. Filesystem errors (open/write/close)
+  propagate as an error (CLI: exit 1 with `error:`; IPC: `{error:{code:"internal",…}}`).
 
 ## B-002 — Verify the chain
 
@@ -71,11 +74,14 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
 
 - **`{"op":"emit","event":{…}}`** → `{seq, hash}`; missing `event` → `{error:{code:"bad_request",
   message:"missing event",retryable:false}}`.
+- **Emit numeric validation:** integer JSON numbers are accepted and normalized before append;
+  fractional JSON numbers → `{error:{code:"bad_request",…}}` and no append.
 - **`{"op":"verify"}`** → the verify result object.
 - **`{"op":"ping"}`** → `{"ok":true}` (liveness).
 - **Unparseable request** → `{error:{code:"bad_request",…}}`.
 - **Unknown op** → `{error:{code:"unknown_op",message:"unsupported op",retryable:false}}`.
-- **Emit failure** → `{error:{code:"internal",…}}`.
+- **Core event validation failure** → `{error:{code:"bad_request",…}}`.
+- **Server-side emit failure** → `{error:{code:"internal",…}}`.
 
 ## B-007 — Canonicalization is order-independent
 
