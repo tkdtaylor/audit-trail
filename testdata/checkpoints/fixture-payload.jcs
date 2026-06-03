@@ -1,0 +1,1 @@
+{"contract":"audit-trail-v1","format":"audit-trail-checkpoint-v1","hash_algorithm":"sha256-linear-chain-v1","issued_at":1700000000,"last_seq":1,"log_id":"fixture-log","root_hash":"be47f1f0455b33bf2b900b12693eb7d296f15caef88500a851bac982ba9ff07f","tree_size":2,"version":1}
