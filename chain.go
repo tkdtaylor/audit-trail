@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"reflect"
@@ -14,6 +15,8 @@ import (
 
 // Genesis is the prev_hash of the first entry in a chain.
 const Genesis = "0000000000000000000000000000000000000000000000000000000000000000"
+
+var errInvalidAuditEvent = errors.New("invalid audit event")
 
 // Chain is an append-only, hash-chained, RFC 8785-canonicalized event log.
 //
@@ -79,7 +82,7 @@ func (c *Chain) Emit(event map[string]any) (map[string]any, error) {
 	defer c.mu.Unlock()
 
 	if err := validateEmitEventNoFloats(event); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errInvalidAuditEvent, err)
 	}
 
 	rec := map[string]any{

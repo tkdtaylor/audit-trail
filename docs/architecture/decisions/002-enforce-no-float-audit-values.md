@@ -42,4 +42,4 @@ is a client/input validation failure, not an internal server error.
   floats excluded.
 - [docs/spec/fitness-functions.md](../../spec/fitness-functions.md) — FF-004.
 - [docs/tasks/completed/002-reject-floats-in-core.md](../../tasks/completed/002-reject-floats-in-core.md)
-- [docs/tasks/backlog/003-normalize-ipc-json-numbers.md](../../tasks/backlog/003-normalize-ipc-json-numbers.md)
+- [docs/tasks/completed/003-normalize-ipc-json-numbers.md](../../tasks/completed/003-normalize-ipc-json-numbers.md)

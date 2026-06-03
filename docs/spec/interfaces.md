@@ -21,14 +21,18 @@ Unknown subcommand or no args → usage to stderr, exit 2.
 Newline-delimited JSON over a Unix domain socket (`--socket`). One request → one response,
 then the connection closes. Socket is `chmod 0600`.
 
+IPC request decoding preserves JSON numbers. For `emit` events, integer JSON numbers are
+normalized to Go `int64` values before the core `Chain.Emit` call; fractional JSON numbers are
+rejected as client input.
+
 | Request | Success response | Error response |
 |---------|------------------|----------------|
-| `{"op":"emit","event":{…}}` | `{"seq":N,"hash":"…"}` | `{"error":{"code":"bad_request","message":"missing event","retryable":false}}` if `event` absent |
+| `{"op":"emit","event":{…}}` | `{"seq":N,"hash":"…"}` | `{"error":{"code":"bad_request","message":"missing event","retryable":false}}` if `event` absent; `bad_request` for fractional JSON numbers or core event validation failures |
 | `{"op":"verify"}` | `{"valid":…,"tamper_detected_at":…,"message":"…"}` | — |
 | `{"op":"ping"}` | `{"ok":true}` | — |
 | unparseable | — | `{"error":{"code":"bad_request",…}}` |
 | unknown `op` | — | `{"error":{"code":"unknown_op","message":"unsupported op","retryable":false}}` |
-| emit failure | — | `{"error":{"code":"internal",…}}` |
+| server-side emit failure | — | `{"error":{"code":"internal",…}}` |
 
 **Error shape** is the shared ecosystem contract: `{error:{code,message,retryable}}`. All
 current errors are `retryable:false`.

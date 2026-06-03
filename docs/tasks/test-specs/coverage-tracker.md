@@ -13,8 +13,8 @@
 | Task ID | Feature | Spec file | Tests written | Status | Verified by |
 |---------|---------|-----------|---------------|--------|-------------|
 | 001 | Wire verification targets | [001-wire-verification-targets-test-spec.md](001-wire-verification-targets-test-spec.md) | Spec complete; TC-001-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; failure paths observed |
-| 002 | Reject floats in core emit path | [002-reject-floats-in-core-test-spec.md](002-reject-floats-in-core-test-spec.md) | Spec complete; TC-002-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; runtime observation: IPC emit with `context.score=1.5` -> `audited event rejects float at context.score (float64)`, logfile byte count `0` |
-| 003 | Normalize IPC JSON numbers | [003-normalize-ipc-json-numbers-test-spec.md](003-normalize-ipc-json-numbers-test-spec.md) | Spec written; tests pending | ❌ | Not started |
+| 002 | Reject floats in core emit path | [002-reject-floats-in-core-test-spec.md](002-reject-floats-in-core-test-spec.md) | Spec complete; TC-002-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; core float rejection remains covered by `TestEmitRejectsFloats`; current IPC numeric behavior is verified by task 003 |
+| 003 | Normalize IPC JSON numbers | [003-normalize-ipc-json-numbers-test-spec.md](003-normalize-ipc-json-numbers-test-spec.md) | Spec complete; TC-003-01..05 passed | ✅ | L6: live `go run . serve` socket path; integer emit -> `{"seq":0,"hash":"..."}`; fractional emit -> `{"error":{"code":"bad_request",...,"retryable":false}}`; verify -> `{"valid":true,...}`; logfile line count `1`; `make check` -> `go build ./...`; `make fitness` -> `fitness: all wired checks passed` |
 
 ## Status key
 
