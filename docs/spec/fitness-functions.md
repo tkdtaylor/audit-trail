@@ -25,10 +25,9 @@ make fitness          # run all fitness functions
 make fitness-<rule>   # run one rule by name
 ```
 
-> **Status:** `make fitness` is wired for the currently enforceable rules below. FF-004's
-> enforcement decision is accepted in
-> [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md); implementation is
-> still pending in [task 002](../tasks/backlog/002-reject-floats-in-core.md).
+> **Status:** `make fitness` is wired for the currently enforceable rules below, including the
+> FF-004 core emit guard accepted in
+> [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md).
 
 ## Rules
 
@@ -37,7 +36,7 @@ make fitness-<rule>   # run one rule by name
 | FF-001 | No third-party dependencies | structural | `go.mod` has zero `require` directives (stdlib only) | 0 deps | `make fitness-no-deps` | block | ADR-001 D1: a forensic spine minimizes trust surface. Any dependency is code that could weaken the integrity claim. Currently true and must stay true. | wired |
 | FF-002 | Tamper detection holds | security | A one-byte flip on any past entry fails `verify()` | pass | `make fitness-tamper-detection` | block | This is the entire product promise (behaviors.md B-003). If it regresses, the log is no longer forensic. Already covered by a test — promote it to a named gate. | wired |
 | FF-003 | Canonicalization is order-independent & stable | security | Reordered keys produce identical canonical bytes/hash | pass | `make fitness-canonical-stability` | block | An independent verifier must reproduce a hash without knowing emit order (B-007). Drift in canonical.go silently breaks every hash. | wired |
-| FF-004 | No floats reach canonicalization | security | Audited event values are int/string/bool/null/array/object only | 0 floats | `make fitness-no-floats` once task 002 wires the guard | block | ADR-001 D2 and ADR-002: floats are the one JCS-divergence point. Today this is an unenforced convention; task 002 makes it executable. | proposed |
+| FF-004 | No floats reach canonicalization through emit | security | `Chain.Emit` rejects float32/float64 in audited event values before hashing or append | 0 floats | `make fitness-no-floats` | block | ADR-001 D2 and ADR-002: floats are the one JCS-divergence point. The core guard keeps direct callers and transports from feeding floats into audited record hashes. | wired |
 | FF-005 | `gofmt` clean | hygiene | All `.go` files are gofmt-formatted | 0 diffs | `make fitness-gofmt` | warn | Keeps diffs reviewable; cheap to enforce. `make fmt` already exists. | wired |
 
 Categories: `structural`, `hygiene`, `performance`, `complexity`, `security`, `coverage`.
@@ -53,11 +52,10 @@ Severity: `block` (fails the runner) / `warn` (surfaces only).
 
 - FF-001 ← ADR-001 D1, [SPEC.md](SPEC.md) top-level invariants
 - FF-002, FF-003 ← [behaviors.md](behaviors.md) B-003 / B-007
-- FF-004 ← ADR-001 D2, ADR-002, [behaviors.md](behaviors.md) B-007 known gap
+- FF-004 ← ADR-001 D2, ADR-002, [behaviors.md](behaviors.md) B-001 / B-007
 
 ## Notes
 
-- FF-004 is the highest-value rule that **isn't** enforced yet — a float in `context` would
-  canonicalize via Go's default float formatting and could diverge from JCS. ADR-002 chooses
-  input-time rejection; [task 002](../tasks/backlog/002-reject-floats-in-core.md) wires the
-  guard.
+- FF-004 covers the core `Chain.Emit` path. IPC-specific JSON number preservation and
+  fractional-number error mapping are handled separately by
+  [task 003](../tasks/backlog/003-normalize-ipc-json-numbers.md).

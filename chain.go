@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -76,6 +78,10 @@ func (c *Chain) Emit(event map[string]any) (map[string]any, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if err := validateEmitEventNoFloats(event); err != nil {
+		return nil, err
+	}
+
 	rec := map[string]any{
 		"seq":       c.seq,
 		"ts":        toInt64(event["ts"]),
@@ -113,6 +119,68 @@ func (c *Chain) Emit(event map[string]any) (map[string]any, error) {
 	c.seq++
 	c.prevHash = hash
 	return out, nil
+}
+
+func validateEmitEventNoFloats(event map[string]any) error {
+	for _, field := range []string{"ts", "actor", "action", "target", "decision", "refs", "context"} {
+		if err := rejectFloats(event[field], field); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectFloats(v any, path string) error {
+	return rejectFloatsValue(reflect.ValueOf(v), path)
+}
+
+func rejectFloatsValue(v reflect.Value, path string) error {
+	if !v.IsValid() {
+		return nil
+	}
+
+	switch v.Kind() {
+	case reflect.Interface, reflect.Ptr:
+		if v.IsNil() {
+			return nil
+		}
+		return rejectFloatsValue(v.Elem(), path)
+	case reflect.Float32, reflect.Float64:
+		return fmt.Errorf("audited event rejects float at %s (%s)", path, v.Kind())
+	case reflect.Map:
+		for _, key := range v.MapKeys() {
+			if err := rejectFloatsValue(v.MapIndex(key), childPath(path, key)); err != nil {
+				return err
+			}
+		}
+	case reflect.Struct:
+		t := v.Type()
+		for i := 0; i < v.NumField(); i++ {
+			if t.Field(i).PkgPath != "" {
+				continue
+			}
+			if err := rejectFloatsValue(v.Field(i), childPath(path, reflect.ValueOf(t.Field(i).Name))); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < v.Len(); i++ {
+			if err := rejectFloatsValue(v.Index(i), fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func childPath(path string, key reflect.Value) string {
+	if key.Kind() == reflect.String {
+		if path == "" {
+			return key.String()
+		}
+		return path + "." + key.String()
+	}
+	return fmt.Sprintf("%s[%v]", path, key.Interface())
 }
 
 // VerifyResult is the outcome of walking the chain.

@@ -17,8 +17,8 @@ mode `0600`. This file **is** the chain; there is no other persistence.
 | `action` | string | emitter | Verb: `resolve`, `inject`, `decide`, `scan`, `spawn`, `exit`, … |
 | `target` | string | emitter | Resource: `vault://…`, host, sandbox-id, … |
 | `decision` | string \| null | emitter | `allow`/`deny`/`require_approval`/`block`; `null` if unset. |
-| `refs` | array | emitter | `[{type,id}]` attestation refs; defaults to `[]`. |
-| `context` | object | emitter | Emitter-specific; **integer/string values only**; defaults to `{}`. |
+| `refs` | array | emitter | `[{type,id}]` attestation refs; recursive values may be integer/string/bool/null/array/object; defaults to `[]`. |
+| `context` | object | emitter | Emitter-specific; recursive values may be integer/string/bool/null/array/object; defaults to `{}`. |
 | `prev_hash` | string | server-assigned | Hash of the previous record; `Genesis` (64 zeros) for seq 0. |
 | `hash` | string | server-assigned | `SHA256(prev_hash + canonical(record_without_hash))`, hex lowercase. |
 
@@ -32,9 +32,8 @@ own input.
 - **Genesis:** the first record's `prev_hash` is `"0000…0000"` (64 zeros).
 - **Linkage:** record *n*'s `prev_hash` equals record *n−1*'s `hash`.
 - **Content binding:** `hash` recomputes exactly from the record's canonical content.
-- **No floats** in any audited value (keeps canonicalization byte-exact). Convention, not yet
-  guarded at input — see [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md)
-  and [task 002](../tasks/backlog/002-reject-floats-in-core.md).
+- **No floats** in any audited value (keeps canonicalization byte-exact). `Chain.Emit` rejects
+  Go `float32` and `float64` values in audited event fields before hashing or appending.
 - **Append-only:** the application never rewrites a line; integrity assumes the file is only
   appended to between emits.
 

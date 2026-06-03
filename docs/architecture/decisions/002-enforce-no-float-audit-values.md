@@ -41,5 +41,5 @@ is a client/input validation failure, not an internal server error.
 - [ADR-001 D2](001-foundational-stack.md) — canonicalization: RFC 8785/JCS via `encoding/json`,
   floats excluded.
 - [docs/spec/fitness-functions.md](../../spec/fitness-functions.md) — FF-004.
-- [docs/tasks/backlog/002-reject-floats-in-core.md](../../tasks/backlog/002-reject-floats-in-core.md)
+- [docs/tasks/completed/002-reject-floats-in-core.md](../../tasks/completed/002-reject-floats-in-core.md)
 - [docs/tasks/backlog/003-normalize-ipc-json-numbers.md](../../tasks/backlog/003-normalize-ipc-json-numbers.md)

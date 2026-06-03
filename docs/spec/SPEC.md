@@ -75,7 +75,7 @@ detect, prevent, or alert. Go, standard library only.
 - **Not telemetry / observability.** No metrics, no alerting, no detection. It records facts.
 - **Not access control.** It does not authenticate or authorize emitters (file/socket perms
   are the only gate).
-- **No floats in audited events** — deliberately out of scope to keep canonicalization exact.
+- **Float support in audited events** — deliberately out of scope to keep canonicalization exact.
 - **Not (yet) cryptographically signed or anchored.** Signed checkpoints, witness/Rekor
   anchoring, rotation, query API, and pluggable backends are v1+ roadmap, behind the
   emit/verify seam — see ADR-001.

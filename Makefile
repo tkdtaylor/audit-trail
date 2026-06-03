@@ -1,4 +1,4 @@
-.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-gofmt
+.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-gofmt
 
 build:
 	go build -o bin/audit-trail ./...
@@ -13,7 +13,7 @@ check:
 fmt:
 	go fmt ./...
 
-fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-gofmt
+fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-gofmt
 	@echo "fitness: all wired checks passed"
 
 fitness-no-deps:
@@ -28,6 +28,9 @@ fitness-tamper-detection:
 
 fitness-canonical-stability:
 	go test ./... -run '^TestCanonicalIsOrderIndependent$$'
+
+fitness-no-floats:
+	go test ./... -run '^TestEmitRejectsFloats$$'
 
 fitness-gofmt:
 	@tmp="$$(mktemp)"; \

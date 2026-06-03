@@ -19,7 +19,11 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
 - **Defaults / normalization:** `refs` defaults to `[]`, `context` to `{}`, `ts` is coerced to
   int64, missing optional fields are stored as `null`. Via CLI, `ts` is `time.Now().Unix()` and
   `decision` is omitted from the event when the flag is empty.
-- **Failure modes:** Filesystem errors (open/write/close) propagate as an error (CLI: exit 1
+- **Validation:** Audited event inputs copied into the record (`ts`, `actor`, `action`,
+  `target`, `decision`, `refs`, `context`) must not contain Go `float32` or `float64` values.
+  `refs` and `context` are checked recursively before hashing or appending.
+- **Failure modes:** Float validation errors name the rejected location and return before any
+  record is appended. Filesystem errors (open/write/close) propagate as an error (CLI: exit 1
   with `error:`; IPC: `{error:{code:"internal",…}}`).
 
 ## B-002 — Verify the chain
@@ -80,11 +84,6 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   produce identical canonical bytes and therefore identical hashes — keys are sorted
   (`TestCanonicalIsOrderIndependent`). This is what lets an independent verifier reproduce a
   hash without knowing the emitter's serialization order.
-
----
-
-> **Known gap:** There is no input-time guard rejecting float values in `context`. A float in
-> `context` would canonicalize via Go's default float formatting, which can diverge from JCS.
-> [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md) accepts enforcing
-> this invariant; [task 002](../tasks/backlog/002-reject-floats-in-core.md) tracks the
-> implementation.
+- **Input subset:** `Chain.Emit` rejects `float32` and `float64` values before record hashing
+  so emitted records stay in the integer/string/bool/null/array/object subset described by
+  ADR-001 and ADR-002.
