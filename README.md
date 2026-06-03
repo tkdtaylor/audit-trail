@@ -1,0 +1,51 @@
+# audit-trail — tamper-evident, hash-chained action log
+
+The **spine** of the secure-agent ecosystem. Every block emits to it; nothing else is
+trusted to record what happened. It is a *forensic archive*, not observability telemetry —
+it must survive agent compromise.
+
+- **Append-only & hash-chained:** `hash = SHA256( prev_hash + JCS(event) )`
+- **Tamper-evident:** any alteration — down to a single byte — fails `verify()`
+- **Deterministic & offline:** `verify()` walks the chain with no external oracle
+- **Standalone:** any process or block can emit; CLI + Unix-socket IPC forms
+
+> Prior-art verdict: **BUILD** the hash-chain (RFC 6962 pattern + RFC 8785/JCS canonicalization). sigstore/Rekor and immudb (both Apache-2.0) are reference designs + optional v1 pluggable backends. The value-add is the agent-centric event schema + deterministic verify + multi-block integration. **License: PolyForm Noncommercial 1.0.0.**
+
+## Contract (interface-contracts.md §2, v1)
+
+```
+emit(event) -> { seq, hash }
+event = { ts, actor, action, target, decision?, refs:[{type,id}], context?, prev_hash }
+verify() -> { valid, tamper_detected_at, message }
+```
+
+Canonicalization is **RFC 8785 (JCS)** — validated by the tracer-bullet (decisions.md D2);
+audited events use integer/string values only (floats are kept out, the one JCS-divergence
+point).
+
+## Build & run
+
+```sh
+go build ./...
+go test ./...
+
+audit-trail serve  --socket /run/audit.sock --logfile audit.log   # IPC daemon (hot path)
+audit-trail emit   --logfile audit.log --actor vault --action resolve --target vault://x
+audit-trail verify --logfile audit.log                            # exits non-zero on tamper
+```
+
+IPC request shape (newline-delimited JSON on the Unix socket): `{"op":"emit","event":{…}}`,
+`{"op":"verify"}`, `{"op":"ping"}`.
+
+## Status
+
+🚧 **v0 implementation, v1 contract.** Functional emit/verify + RFC 8785 + IPC/CLI + tests
+(ported from the tracer-bullet reference). Deferred to v1+: signed
+checkpoints (RFC 6962 STH), witness/Rekor anchoring, log rotation, indexed query API,
+pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
+
+## Adapter seam & standards
+
+Adopts **RFC 6962** (Merkle/transparency-log pattern), **RFC 8785** (canonical JSON),
+**in-toto/SLSA** attestation refs in `refs`, **OpenTelemetry** logs as an optional export.
+Pluggable backends behind the emit/verify seam: Rekor, immudb, PostgreSQL, SQLite.
