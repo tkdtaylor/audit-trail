@@ -5,7 +5,7 @@
 Add durable regression fixtures and fitness checks for signed checkpoints so future anchoring,
 rotation, and backend work cannot accidentally change checkpoint bytes or signature semantics.
 
-Design decision: task 004's signed-checkpoints ADR.
+Design decision: [ADR-003](../../architecture/decisions/003-signed-checkpoints.md).
 
 ## Requirements
 
