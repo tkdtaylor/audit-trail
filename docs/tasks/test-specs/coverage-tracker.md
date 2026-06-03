@@ -15,6 +15,11 @@
 | 001 | Wire verification targets | [001-wire-verification-targets-test-spec.md](001-wire-verification-targets-test-spec.md) | Spec complete; TC-001-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; failure paths observed |
 | 002 | Reject floats in core emit path | [002-reject-floats-in-core-test-spec.md](002-reject-floats-in-core-test-spec.md) | Spec complete; TC-002-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; core float rejection remains covered by `TestEmitRejectsFloats`; current IPC numeric behavior is verified by task 003 |
 | 003 | Normalize IPC JSON numbers | [003-normalize-ipc-json-numbers-test-spec.md](003-normalize-ipc-json-numbers-test-spec.md) | Spec complete; TC-003-01..05 passed | ✅ | L6: live `go run . serve` socket path; integer emit -> `{"seq":0,"hash":"..."}`; fractional emit -> `{"error":{"code":"bad_request",...,"retryable":false}}`; verify -> `{"valid":true,...}`; logfile line count `1`; `make check` -> `go build ./...`; `make fitness` -> `fitness: all wired checks passed` |
+| 004 | Design signed checkpoints | [004-design-signed-checkpoints-test-spec.md](004-design-signed-checkpoints-test-spec.md) | Spec drafted; TC-004-01..05 pending | ❌ | Not yet implemented |
+| 005 | Checkpoint payload core | [005-checkpoint-payload-core-test-spec.md](005-checkpoint-payload-core-test-spec.md) | Spec drafted; TC-005-01..05 pending | ❌ | Not yet implemented |
+| 006 | Sign and verify checkpoints | [006-sign-and-verify-checkpoints-test-spec.md](006-sign-and-verify-checkpoints-test-spec.md) | Spec drafted; TC-006-01..05 pending | ❌ | Not yet implemented |
+| 007 | Checkpoint runtime surface | [007-checkpoint-runtime-surface-test-spec.md](007-checkpoint-runtime-surface-test-spec.md) | Spec drafted; TC-007-01..05 pending | ❌ | Not yet implemented |
+| 008 | Checkpoint fitness and fixtures | [008-checkpoint-fitness-and-fixtures-test-spec.md](008-checkpoint-fitness-and-fixtures-test-spec.md) | Spec drafted; TC-008-01..05 pending | ❌ | Not yet implemented |
 
 ## Status key
 
