@@ -4,7 +4,8 @@
 
 Enforce the documented "no floats in audited events" invariant in the core `Chain.Emit` path.
 This task covers direct Go callers and the core validation behavior. IPC-specific JSON number
-normalization is task 003.
+normalization is task 003. The accepted design decision is
+[ADR-002](../../architecture/decisions/002-enforce-no-float-audit-values.md).
 
 ## Requirements traced
 
@@ -14,7 +15,8 @@ normalization is task 003.
 - REQ-002-03: valid integer, string, bool, nil, array, and object values continue to emit and
   verify successfully.
 - REQ-002-04: validation errors are explicit enough for callers to identify a rejected float.
-- REQ-002-05: behavior and fitness docs no longer describe float rejection as only proposed.
+- REQ-002-05: behavior, data-model, and fitness docs no longer describe float rejection as only
+  proposed.
 
 ## Test cases
 

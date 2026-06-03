@@ -5,6 +5,8 @@
 Make the highest-value unenforced invariant executable: floats must not reach audited record
 canonicalization through `Chain.Emit`.
 
+Design decision: [ADR-002](../../architecture/decisions/002-enforce-no-float-audit-values.md).
+
 ## Requirements
 
 - REQ-002-01: Reject float32 and float64 values before hashing or appending a record.
@@ -14,7 +16,8 @@ canonicalization through `Chain.Emit`.
   integer/string/bool/null/array/object.
 - REQ-002-04: Return a clear validation error that names float rejection.
 - REQ-002-05: Wire FF-004 into `make fitness` through a named `fitness-no-floats` target and
-  update `docs/spec/fitness-functions.md` plus `docs/spec/behaviors.md`.
+  update `docs/spec/fitness-functions.md`, `docs/spec/behaviors.md`, and
+  `docs/spec/data-model.md`.
 
 ## Acceptance criteria
 

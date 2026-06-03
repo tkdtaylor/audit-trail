@@ -5,6 +5,8 @@
 Keep IPC usable after float rejection by preserving integer JSON numbers and rejecting
 fractional values at the socket boundary with the correct client-error shape.
 
+Design decision: [ADR-002](../../architecture/decisions/002-enforce-no-float-audit-values.md).
+
 ## Requirements
 
 - REQ-003-01: Decode IPC JSON using a number-preserving path and normalize integer JSON numbers

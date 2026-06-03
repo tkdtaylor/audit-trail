@@ -83,7 +83,8 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
 
 ---
 
-> **TODO (user confirm):** There is no input-time guard rejecting float values in `context`.
-> A float in `context` would canonicalize via Go's default float formatting, which can diverge
-> from JCS. Confirm whether this should become an enforced behavior (reject) or remain a
-> documented convention — candidate fitness function FF-004.
+> **Known gap:** There is no input-time guard rejecting float values in `context`. A float in
+> `context` would canonicalize via Go's default float formatting, which can diverge from JCS.
+> [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md) accepts enforcing
+> this invariant; [task 002](../tasks/backlog/002-reject-floats-in-core.md) tracks the
+> implementation.

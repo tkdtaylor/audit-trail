@@ -3,7 +3,9 @@
 ## Scope
 
 Make the Unix-socket IPC boundary compatible with the no-floats invariant by decoding JSON
-numbers deliberately instead of accepting `encoding/json`'s default float64 conversion.
+numbers deliberately instead of accepting `encoding/json`'s default float64 conversion. The
+accepted design decision is
+[ADR-002](../../architecture/decisions/002-enforce-no-float-audit-values.md).
 
 ## Requirements traced
 

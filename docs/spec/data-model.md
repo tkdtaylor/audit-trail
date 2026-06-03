@@ -33,7 +33,8 @@ own input.
 - **Linkage:** record *n*'s `prev_hash` equals record *n−1*'s `hash`.
 - **Content binding:** `hash` recomputes exactly from the record's canonical content.
 - **No floats** in any audited value (keeps canonicalization byte-exact). Convention, not yet
-  guarded at input — see behaviors.md B-007 TODO.
+  guarded at input — see [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md)
+  and [task 002](../tasks/backlog/002-reject-floats-in-core.md).
 - **Append-only:** the application never rewrites a line; integrity assumes the file is only
   appended to between emits.
 
