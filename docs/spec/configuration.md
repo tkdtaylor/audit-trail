@@ -15,6 +15,18 @@ controlled by CLI flags ([main.go](../../main.go)).
 | `--action` | emit | `""` | Event `action`. |
 | `--target` | emit | `""` | Event `target`. |
 | `--decision` | emit | `""` | Event `decision`; omitted from the event when empty. |
+| `--signing-key` | checkpoint create *(planned runtime surface)* | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
+| `--public-key` | checkpoint verify *(planned runtime surface)* | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key used to verify checkpoint signatures. |
+
+## Checkpoint key files
+
+Checkpoint signing uses Ed25519 from the Go standard library. Signing keys are PEM-wrapped
+PKCS #8 Ed25519 private keys with PEM label `PRIVATE KEY`. Verification keys are PEM-wrapped
+SubjectPublicKeyInfo Ed25519 public keys with PEM label `PUBLIC KEY`.
+
+Malformed PEM, trailing data after a PEM block, wrong PEM labels, non-Ed25519 keys, empty keys,
+missing files, and malformed DER fail closed. The implementation does not synthesize default
+checkpoint keys and does not fall back to another algorithm.
 
 ## File permissions
 
@@ -25,10 +37,13 @@ controlled by CLI flags ([main.go](../../main.go)).
 
 ## Secrets
 
-**None.** audit-trail stores no credentials and authenticates no callers. Access control is
-entirely filesystem/socket permissions — anyone who can write the socket or the logfile can
-emit. (Audited `context`/`target` values should not contain secrets; that is the emitter's
-responsibility.)
+For v1 `emit`/`verify`, audit-trail stores no credentials and authenticates no callers. Access
+control is entirely filesystem/socket permissions — anyone who can write the socket or the
+logfile can emit. (Audited `context`/`target` values should not contain secrets; that is the
+emitter's responsibility.)
+
+Checkpoint private keys are operator-managed secret files. audit-trail reads them only when a
+checkpoint signing operation is requested; it does not persist private key material in the log.
 
 ## Scanner buffer limits
 

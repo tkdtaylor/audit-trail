@@ -111,3 +111,24 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   `canonical(checkpoint.payload)`, excluding future signature envelope fields. The helper is
   the single signing-byte source for future signing, verification, fixtures, and fitness
   checks.
+
+## B-009 — Sign and verify checkpoint signatures
+
+- **Trigger:** `SignCheckpointPayload(payload, privateKey)` from checkpoint creation code, or
+  `VerifySignedCheckpoint(checkpoint, publicKey)` from checkpoint verification code.
+- **Signing response:** A signed checkpoint envelope with `payload` unchanged and
+  `signature:{algorithm:"ed25519",key_id,sig}`. `key_id` is `ed25519-sha256:` plus the
+  lowercase hex SHA-256 digest of the raw public key bytes. `sig` is an Ed25519 signature over
+  `CheckpointPayloadBytes(payload)`, encoded as unpadded base64url.
+- **Verification response:** `CheckpointVerificationResult` with
+  `{valid:true, signature_valid:true, log_match:null, message:"checkpoint signature valid"}`
+  when the signature verifies. Signature-only verification leaves `log_match` null because no
+  logfile comparison has been requested yet.
+- **Key loading:** Signing keys load from PEM-wrapped PKCS #8 Ed25519 private keys labeled
+  `PRIVATE KEY`. Verification keys load from PEM-wrapped SubjectPublicKeyInfo Ed25519 public
+  keys labeled `PUBLIC KEY`.
+- **Failure modes:** Malformed payloads, malformed or missing key files, wrong key types,
+  empty keys, unsupported algorithms, key-id mismatches, malformed base64url signatures,
+  wrong-length signatures, altered payload fields, altered signatures, and wrong verification
+  keys fail closed. Verification returns `{valid:false, signature_valid:false, log_match:null,
+  message:"..."}` rather than panicking or falling back to another algorithm.
