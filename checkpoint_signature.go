@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -138,6 +141,25 @@ func SignCheckpointPayload(payload CheckpointPayload, privateKey ed25519.Private
 	}, nil
 }
 
+// DecodeSignedCheckpoint parses a checkpoint envelope and rejects malformed or unknown fields.
+func DecodeSignedCheckpoint(data []byte) (SignedCheckpoint, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+
+	var checkpoint SignedCheckpoint
+	if err := dec.Decode(&checkpoint); err != nil {
+		return SignedCheckpoint{}, fmt.Errorf("%w: decode checkpoint: %w", errInvalidCheckpointSignature, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err != nil {
+			return SignedCheckpoint{}, fmt.Errorf("%w: decode checkpoint: %w", errInvalidCheckpointSignature, err)
+		}
+		return SignedCheckpoint{}, fmt.Errorf("%w: multiple JSON values in checkpoint", errInvalidCheckpointSignature)
+	}
+	return checkpoint, nil
+}
+
 // VerifySignedCheckpoint fails closed for malformed envelopes and invalid signatures.
 func VerifySignedCheckpoint(checkpoint SignedCheckpoint, publicKey ed25519.PublicKey) CheckpointVerificationResult {
 	if len(publicKey) != ed25519.PublicKeySize {
@@ -176,6 +198,41 @@ func VerifySignedCheckpoint(checkpoint SignedCheckpoint, publicKey ed25519.Publi
 		LogMatch:       nil,
 		Message:        "checkpoint signature valid",
 	}
+}
+
+// VerifySignedCheckpointForLog verifies the signature and compares it to a verified logfile.
+func VerifySignedCheckpointForLog(checkpoint SignedCheckpoint, publicKey ed25519.PublicKey, logPath string) CheckpointVerificationResult {
+	result := VerifySignedCheckpoint(checkpoint, publicKey)
+	if !result.Valid {
+		return result
+	}
+
+	state, verifyResult := verifyChainState(logPath)
+	if !verifyResult.Valid {
+		match := false
+		return CheckpointVerificationResult{
+			Valid:          false,
+			SignatureValid: true,
+			LogMatch:       &match,
+			Message:        "checkpoint signature valid, but logfile verification failed: " + verifyResult.Message,
+		}
+	}
+	if checkpoint.Payload.TreeSize != state.treeSize ||
+		checkpoint.Payload.LastSeq != state.lastSeq ||
+		checkpoint.Payload.RootHash != state.rootHash {
+		match := false
+		return CheckpointVerificationResult{
+			Valid:          false,
+			SignatureValid: true,
+			LogMatch:       &match,
+			Message:        "checkpoint signature valid, but logfile does not match checkpoint",
+		}
+	}
+
+	match := true
+	result.LogMatch = &match
+	result.Message = "checkpoint signature valid and logfile matches"
+	return result
 }
 
 func invalidCheckpointResult(message string) CheckpointVerificationResult {

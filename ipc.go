@@ -9,11 +9,18 @@ import (
 	"io"
 	"net"
 	"os"
+	"time"
 )
+
+type CheckpointServerConfig struct {
+	LogID          string
+	SigningKeyPath string
+	PublicKeyPath  string
+}
 
 // serve runs the JSON-over-Unix-socket IPC form of the contract (interface-contracts §1):
 // one newline-terminated JSON request {op: emit|verify|ping} -> one JSON response.
-func serve(socketPath string, chain *Chain) error {
+func serve(socketPath string, chain *Chain, checkpointConfig CheckpointServerConfig) error {
 	_ = os.Remove(socketPath)
 	ln, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -27,11 +34,11 @@ func serve(socketPath string, chain *Chain) error {
 		if err != nil {
 			return err
 		}
-		go handleConn(conn, chain)
+		go handleConn(conn, chain, checkpointConfig)
 	}
 }
 
-func handleConn(conn net.Conn, chain *Chain) {
+func handleConn(conn net.Conn, chain *Chain, checkpointConfig CheckpointServerConfig) {
 	defer conn.Close()
 	line, err := bufio.NewReader(conn).ReadBytes('\n')
 	if err != nil && len(line) == 0 {
@@ -64,6 +71,20 @@ func handleConn(conn net.Conn, chain *Chain) {
 		writeJSON(conn, chain.Verify())
 	case "ping":
 		writeJSON(conn, map[string]any{"ok": true})
+	case "checkpoint_create":
+		checkpoint, err := createCheckpointForIPC(chain, checkpointConfig)
+		if err != nil {
+			writeJSON(conn, errShape(checkpointIPCErrorCode(err), err.Error()))
+			return
+		}
+		writeJSON(conn, checkpoint)
+	case "checkpoint_verify":
+		result, err := verifyCheckpointForIPC(req, chain, checkpointConfig)
+		if err != nil {
+			writeJSON(conn, errShape(checkpointIPCErrorCode(err), err.Error()))
+			return
+		}
+		writeJSON(conn, result)
 	default:
 		writeJSON(conn, errShape("unknown_op", "unsupported op"))
 	}
@@ -72,6 +93,62 @@ func handleConn(conn net.Conn, chain *Chain) {
 func emitErrorCode(err error) string {
 	if errors.Is(err, errInvalidAuditEvent) {
 		return "bad_request"
+	}
+	return "internal"
+}
+
+func createCheckpointForIPC(chain *Chain, config CheckpointServerConfig) (SignedCheckpoint, error) {
+	if config.LogID == "" || config.SigningKeyPath == "" {
+		return SignedCheckpoint{}, errCheckpointNotConfigured
+	}
+	privateKey, err := LoadCheckpointSigningKey(config.SigningKeyPath)
+	if err != nil {
+		return SignedCheckpoint{}, err
+	}
+	return chain.CreateSignedCheckpoint(config.LogID, time.Now().Unix(), privateKey)
+}
+
+func verifyCheckpointForIPC(req map[string]any, chain *Chain, config CheckpointServerConfig) (CheckpointVerificationResult, error) {
+	if config.PublicKeyPath == "" {
+		return CheckpointVerificationResult{}, errCheckpointNotConfigured
+	}
+	checkpointValue := req["checkpoint"]
+	if checkpointValue == nil {
+		return CheckpointVerificationResult{}, fmt.Errorf("%w: missing checkpoint", errInvalidCheckpointSignature)
+	}
+	checkpointBytes, err := json.Marshal(checkpointValue)
+	if err != nil {
+		return CheckpointVerificationResult{}, fmt.Errorf("%w: encode checkpoint: %w", errInvalidCheckpointSignature, err)
+	}
+	checkpoint, err := DecodeSignedCheckpoint(checkpointBytes)
+	if err != nil {
+		return CheckpointVerificationResult{}, err
+	}
+	publicKey, err := LoadCheckpointVerificationKey(config.PublicKeyPath)
+	if err != nil {
+		return CheckpointVerificationResult{}, err
+	}
+	compareLog, ok := req["compare_log"].(bool)
+	if ok && compareLog {
+		return VerifySignedCheckpointForLog(checkpoint, publicKey, chain.path), nil
+	}
+	return VerifySignedCheckpoint(checkpoint, publicKey), nil
+}
+
+var errCheckpointNotConfigured = errors.New("checkpoint not configured")
+
+func checkpointIPCErrorCode(err error) string {
+	if errors.Is(err, errCheckpointNotConfigured) {
+		return "checkpoint_not_configured"
+	}
+	if errors.Is(err, errInvalidCheckpointKey) {
+		return "bad_request"
+	}
+	if errors.Is(err, errInvalidCheckpointPayload) || errors.Is(err, errInvalidCheckpointSignature) {
+		return "bad_request"
+	}
+	if errors.Is(err, errInvalidCheckpointLog) {
+		return "invalid_log"
 	}
 	return "internal"
 }

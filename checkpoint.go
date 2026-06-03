@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 )
@@ -48,6 +49,15 @@ func (c *Chain) BuildCheckpointPayload(logID string, issuedAt int64) (Checkpoint
 		HashAlgorithm: CheckpointHashAlgorithm,
 		IssuedAt:      issuedAt,
 	}, nil
+}
+
+// CreateSignedCheckpoint verifies the logfile, builds a payload, and signs its canonical bytes.
+func (c *Chain) CreateSignedCheckpoint(logID string, issuedAt int64, privateKey ed25519.PrivateKey) (SignedCheckpoint, error) {
+	payload, err := c.BuildCheckpointPayload(logID, issuedAt)
+	if err != nil {
+		return SignedCheckpoint{}, err
+	}
+	return SignCheckpointPayload(payload, privateKey)
 }
 
 // CheckpointPayloadBytes returns the canonical bytes that checkpoint signatures cover.

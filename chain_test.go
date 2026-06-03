@@ -287,11 +287,16 @@ func TestIPCPreservesExistingOpsAndErrors(t *testing.T) {
 
 func ipcRoundTrip(t *testing.T, c *Chain, req string) map[string]any {
 	t.Helper()
+	return ipcRoundTripWithConfig(t, c, CheckpointServerConfig{}, req)
+}
+
+func ipcRoundTripWithConfig(t *testing.T, c *Chain, config CheckpointServerConfig, req string) map[string]any {
+	t.Helper()
 
 	server, client := net.Pipe()
 	done := make(chan struct{})
 	go func() {
-		handleConn(server, c)
+		handleConn(server, c, config)
 		close(done)
 	}()
 

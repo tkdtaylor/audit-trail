@@ -11,12 +11,19 @@ controlled by CLI flags ([main.go](../../main.go)).
 |------|-------------|---------|---------|
 | `--logfile` | serve, emit, verify | `audit.log` | Path to the JSONL chain. Created `0600` if absent. |
 | `--socket` | serve | *(required)* | Unix socket path. Stale socket is removed, then `chmod 0600`. |
+| `--checkpoint-log-id` | serve | `""` | Stable log identifier used by IPC `checkpoint_create`; required with `--checkpoint-signing-key` for that op. |
+| `--checkpoint-signing-key` | serve | `""` | PEM Ed25519 private key path used by IPC `checkpoint_create`; clients do not send key paths per request. |
+| `--checkpoint-public-key` | serve | `""` | PEM Ed25519 public key path used by IPC `checkpoint_verify`; clients do not send key paths per request. |
 | `--actor` | emit | `""` | Event `actor`. |
 | `--action` | emit | `""` | Event `action`. |
 | `--target` | emit | `""` | Event `target`. |
 | `--decision` | emit | `""` | Event `decision`; omitted from the event when empty. |
-| `--signing-key` | checkpoint create *(planned runtime surface)* | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
-| `--public-key` | checkpoint verify *(planned runtime surface)* | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key used to verify checkpoint signatures. |
+| `--log-id` | checkpoint create | *(required)* | Stable log identifier included in the signed checkpoint payload. |
+| `--signing-key` | checkpoint create | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
+| `--out` | checkpoint create | `""` | Optional checkpoint JSON output path; stdout is used when omitted. |
+| `--checkpoint` | checkpoint verify | *(required)* | Signed checkpoint JSON path to verify. |
+| `--public-key` | checkpoint verify | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key used to verify checkpoint signatures. |
+| `--logfile` | checkpoint verify | `""` | Optional JSONL log path to verify and compare against the checkpoint head. |
 
 ## Checkpoint key files
 
