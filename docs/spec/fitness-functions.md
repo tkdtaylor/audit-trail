@@ -25,10 +25,8 @@ make fitness          # run all fitness functions
 make fitness-<rule>   # run one rule by name
 ```
 
-> **Status:** the rows below are **proposed until wired**. The audit surfaced them from the
-> code; each still needs a `fitness-<rule>` Makefile target + check wired up. There is no
-> `make fitness` target yet — adding the first rule means adding the umbrella target too.
-> FF-004's enforcement decision is accepted in
+> **Status:** `make fitness` is wired for the currently enforceable rules below. FF-004's
+> enforcement decision is accepted in
 > [ADR-002](../architecture/decisions/002-enforce-no-float-audit-values.md); implementation is
 > still pending in [task 002](../tasks/backlog/002-reject-floats-in-core.md).
 
@@ -36,11 +34,11 @@ make fitness-<rule>   # run one rule by name
 
 | ID | Rule | Category | Asserts | Threshold | Check command | Severity | Why this rule earns its row | Status |
 |----|------|----------|---------|-----------|---------------|----------|----------------------------|--------|
-| FF-001 | No third-party dependencies | structural | `go.mod` has zero `require` directives (stdlib only) | 0 deps | `make fitness-no-deps` (`! grep -q '^require' go.mod`) | block | ADR-001 D1: a forensic spine minimizes trust surface. Any dependency is code that could weaken the integrity claim. Currently true and must stay true. | proposed |
-| FF-002 | Tamper detection holds | security | A one-byte flip on any past entry fails `verify()` | pass | `go test -run TestEmitVerifyAndTamperDetection` | block | This is the entire product promise (behaviors.md B-003). If it regresses, the log is no longer forensic. Already covered by a test — promote it to a named gate. | proposed |
-| FF-003 | Canonicalization is order-independent & stable | security | Reordered keys produce identical canonical bytes/hash | pass | `go test -run TestCanonicalIsOrderIndependent` | block | An independent verifier must reproduce a hash without knowing emit order (B-007). Drift in canonical.go silently breaks every hash. | proposed |
+| FF-001 | No third-party dependencies | structural | `go.mod` has zero `require` directives (stdlib only) | 0 deps | `make fitness-no-deps` | block | ADR-001 D1: a forensic spine minimizes trust surface. Any dependency is code that could weaken the integrity claim. Currently true and must stay true. | wired |
+| FF-002 | Tamper detection holds | security | A one-byte flip on any past entry fails `verify()` | pass | `make fitness-tamper-detection` | block | This is the entire product promise (behaviors.md B-003). If it regresses, the log is no longer forensic. Already covered by a test — promote it to a named gate. | wired |
+| FF-003 | Canonicalization is order-independent & stable | security | Reordered keys produce identical canonical bytes/hash | pass | `make fitness-canonical-stability` | block | An independent verifier must reproduce a hash without knowing emit order (B-007). Drift in canonical.go silently breaks every hash. | wired |
 | FF-004 | No floats reach canonicalization | security | Audited event values are int/string/bool/null/array/object only | 0 floats | `make fitness-no-floats` once task 002 wires the guard | block | ADR-001 D2 and ADR-002: floats are the one JCS-divergence point. Today this is an unenforced convention; task 002 makes it executable. | proposed |
-| FF-005 | `gofmt` clean | hygiene | All `.go` files are gofmt-formatted | 0 diffs | `test -z "$(gofmt -l .)"` | warn | Keeps diffs reviewable; cheap to enforce. `make fmt` already exists. | proposed |
+| FF-005 | `gofmt` clean | hygiene | All `.go` files are gofmt-formatted | 0 diffs | `make fitness-gofmt` | warn | Keeps diffs reviewable; cheap to enforce. `make fmt` already exists. | wired |
 
 Categories: `structural`, `hygiene`, `performance`, `complexity`, `security`, `coverage`.
 Severity: `block` (fails the runner) / `warn` (surfaces only).

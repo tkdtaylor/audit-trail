@@ -12,7 +12,7 @@
 
 | Task ID | Feature | Spec file | Tests written | Status | Verified by |
 |---------|---------|-----------|---------------|--------|-------------|
-| 001 | Wire verification targets | [001-wire-verification-targets-test-spec.md](001-wire-verification-targets-test-spec.md) | Spec written; tests pending | ❌ | Not started |
+| 001 | Wire verification targets | [001-wire-verification-targets-test-spec.md](001-wire-verification-targets-test-spec.md) | Spec complete; TC-001-01..05 passed | 🟡 | L3: `make fitness` -> `fitness: all wired checks passed`; `make check` -> `go build ./...`; failure paths observed |
 | 002 | Reject floats in core emit path | [002-reject-floats-in-core-test-spec.md](002-reject-floats-in-core-test-spec.md) | Spec written; tests pending | ❌ | Not started |
 | 003 | Normalize IPC JSON numbers | [003-normalize-ipc-json-numbers-test-spec.md](003-normalize-ipc-json-numbers-test-spec.md) | Spec written; tests pending | ❌ | Not started |
 
