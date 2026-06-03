@@ -51,6 +51,7 @@ hub for day-to-day work):
   [ADR-001](docs/architecture/decisions/001-foundational-stack.md) consolidates the existing
   stack/architecture decisions as a baseline; future decisions get their own ADR.
 - [docs/CONTRACT.md](docs/CONTRACT.md) — the frozen v1 contract (mirrors the planning hub).
+- [docs/ROADMAP.md](docs/ROADMAP.md) — v1+ items with dependency ordering + per-item risk flags.
 - [docs/tasks/](docs/tasks/) — `active/` · `backlog/` · `completed/` + `test-specs/coverage-tracker.md`.
 
 The external planning hub (``, validated by `tracer-bullet reference`)
@@ -70,6 +71,9 @@ after every milestone; never start the next task before committing the current o
 Signed checkpoints (RFC 6962 STH) · witness/Rekor anchoring · log rotation/checkpointing ·
 indexed query API · pluggable backends (Rekor/immudb/Postgres). Keep these behind the
 emit/verify seam — don't leak backend specifics into the contract.
+
+Dependency ordering + per-item risk flags: [docs/ROADMAP.md](docs/ROADMAP.md). Detail per item
+goes in an ADR when it's picked up — not inline here (keep this section headline-only).
 
 ## Recommended tooling
 

@@ -68,3 +68,5 @@ plain `go build ./...` / `go test ./...`. License: PolyForm Noncommercial 1.0.0.
 Signed checkpoints (RFC 6962 STH) · witness/Rekor anchoring · log rotation/checkpointing ·
 indexed query API · pluggable backends (Rekor/immudb/Postgres/SQLite). Each will get its own
 ADR when undertaken.
+
+Dependency ordering and per-item risk flags are tracked in [../../ROADMAP.md](../../ROADMAP.md).
