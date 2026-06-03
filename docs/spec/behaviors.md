@@ -64,7 +64,9 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
 
 ## B-005 — Serve over a Unix socket
 
-- **Trigger:** `audit-trail serve --socket <path> --logfile <path>`.
+- **Trigger:** `audit-trail serve --socket <path> --logfile <path>` with optional checkpoint
+  config flags `--checkpoint-log-id`, `--checkpoint-signing-key`, and
+  `--checkpoint-public-key`.
 - **Response:** Long-lived daemon. Removes any stale socket, listens, `chmod 0600` on the
   socket, accepts connections, one goroutine per connection. Logs a startup line to stderr.
 - **Per-request:** Reads one newline-terminated JSON request, dispatches on `op`, writes one
@@ -78,10 +80,16 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   fractional JSON numbers → `{error:{code:"bad_request",…}}` and no append.
 - **`{"op":"verify"}`** → the verify result object.
 - **`{"op":"ping"}`** → `{"ok":true}` (liveness).
+- **`{"op":"checkpoint_create"}`** → signed checkpoint envelope when checkpoint signing config
+  is present.
+- **`{"op":"checkpoint_verify","checkpoint":{…},"compare_log":true}`** →
+  `{valid,signature_valid,log_match,message}` when checkpoint verification config is present.
 - **Unparseable request** → `{error:{code:"bad_request",…}}`.
 - **Unknown op** → `{error:{code:"unknown_op",message:"unsupported op",retryable:false}}`.
 - **Core event validation failure** → `{error:{code:"bad_request",…}}`.
 - **Server-side emit failure** → `{error:{code:"internal",…}}`.
+- **Checkpoint config/input failures** →
+  `{error:{code:"checkpoint_not_configured"|"bad_request"|"invalid_log"|"internal",message,retryable:false}}`.
 
 ## B-007 — Canonicalization is order-independent
 
@@ -132,3 +140,36 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   wrong-length signatures, altered payload fields, altered signatures, and wrong verification
   keys fail closed. Verification returns `{valid:false, signature_valid:false, log_match:null,
   message:"..."}` rather than panicking or falling back to another algorithm.
+
+## B-010 — Create and verify checkpoints through runtime surfaces
+
+Runtime checkpoint CLI subcommands are `checkpoint create` and `checkpoint verify`.
+Runtime checkpoint IPC operations are `checkpoint_create` and `checkpoint_verify`.
+
+- **CLI create trigger:** `audit-trail checkpoint create --logfile <path> --log-id <id>
+  --signing-key <private-pem> [--out <path>]`.
+- **CLI create response:** Verifies the on-disk log, derives a checkpoint payload from that
+  verified head, signs `CheckpointPayloadBytes(payload)`, and prints an indented signed
+  checkpoint envelope to stdout. When `--out` is set, writes the same JSON plus a trailing
+  newline to that path with mode `0600`.
+- **CLI verify trigger:** `audit-trail checkpoint verify --checkpoint <path> --public-key
+  <public-pem> [--logfile <path>]`.
+- **CLI verify response:** Prints `{valid, signature_valid, log_match, message}`. Signature-only
+  verification returns `log_match:null`. With `--logfile`, audit-trail first verifies the
+  signature, then verifies the logfile from disk and compares `tree_size`, `last_seq`, and
+  `root_hash` to the signed payload. Exit code is `0` only when the requested verification is
+  valid; invalid signatures, malformed checkpoints, tampered logs, and log mismatches exit
+  non-zero.
+- **IPC create trigger:** `{"op":"checkpoint_create"}`. The daemon uses
+  `--checkpoint-log-id` and `--checkpoint-signing-key` from startup configuration; request
+  bodies cannot supply key paths.
+- **IPC verify trigger:** `{"op":"checkpoint_verify","checkpoint":{…},"compare_log":true}`.
+  The daemon uses `--checkpoint-public-key` from startup configuration. `compare_log:true`
+  compares against the daemon's logfile; absent or false verifies only the signature.
+- **IPC failure modes:** Missing daemon checkpoint config returns
+  `{error:{code:"checkpoint_not_configured",message:"checkpoint not configured",retryable:false}}`.
+  Missing or malformed checkpoint objects and malformed key material return
+  `{error:{code:"bad_request",...,retryable:false}}`. Source log verification failure during
+  checkpoint creation returns `{error:{code:"invalid_log",...,retryable:false}}`.
+- **v1 preservation:** Existing CLI `emit`/`verify` output and IPC `emit`/`verify`/`ping`,
+  unknown-op, and malformed-request shapes are unchanged.
