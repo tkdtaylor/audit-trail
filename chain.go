@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"reflect"
 	"strings"
@@ -193,14 +194,26 @@ type VerifyResult struct {
 	Message          string `json:"message"`
 }
 
+type verifiedChainState struct {
+	treeSize int64
+	lastSeq  int64
+	rootHash string
+}
+
 // Verify walks the on-disk chain. Deterministic and offline.
 func (c *Chain) Verify() VerifyResult {
-	f, err := os.Open(c.path)
+	_, res := verifyChainState(c.path)
+	return res
+}
+
+func verifyChainState(path string) (verifiedChainState, VerifyResult) {
+	f, err := os.Open(path)
 	if err != nil {
-		return VerifyResult{Valid: false, Message: "cannot open log: " + err.Error()}
+		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot open log: " + err.Error()}
 	}
 	defer f.Close()
 
+	state := verifiedChainState{lastSeq: -1, rootHash: Genesis}
 	prev := Genesis
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
@@ -211,15 +224,30 @@ func (c *Chain) Verify() VerifyResult {
 			continue
 		}
 		var rec map[string]any
-		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+		dec := json.NewDecoder(strings.NewReader(line))
+		dec.UseNumber()
+		if err := dec.Decode(&rec); err != nil {
 			at := i
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "entry is not valid JSON (corrupted)"}
 		}
+		var extra any
+		if err := dec.Decode(&extra); err != io.EOF {
+			at := i
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: "entry is not valid JSON (corrupted)"}
+		}
+		normalized, err := normalizeJSONNumbers(rec, "entry")
+		if err != nil {
+			at := seqOf(rec, i)
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: err.Error()}
+		}
+		rec = normalized
 		recPrev, _ := rec["prev_hash"].(string)
 		if recPrev != prev {
 			at := seqOf(rec, i)
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "prev_hash link broken"}
 		}
 		stored, _ := rec["hash"].(string)
@@ -229,23 +257,26 @@ func (c *Chain) Verify() VerifyResult {
 				body[k] = v
 			}
 		}
-		// normalize JSON-decoded numbers back to int64 so canonicalization is stable
-		body["seq"] = toInt64(body["seq"])
-		body["ts"] = toInt64(body["ts"])
 		computed, err := hashRecord(recPrev, body)
 		if err != nil {
 			at := seqOf(rec, i)
-			return VerifyResult{Valid: false, TamperDetectedAt: &at, Message: err.Error()}
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at, Message: err.Error()}
 		}
 		if computed != stored {
 			at := seqOf(rec, i)
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "content hash mismatch (tampered)"}
 		}
 		prev = stored
+		state.lastSeq = seqOf(rec, i)
+		state.rootHash = stored
+		state.treeSize++
 		i++
 	}
-	return VerifyResult{Valid: true, Message: "chain intact"}
+	if err := sc.Err(); err != nil {
+		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot read log: " + err.Error()}
+	}
+	return state, VerifyResult{Valid: true, Message: "chain intact"}
 }
 
 func toInt64(v any) int64 {
@@ -256,6 +287,9 @@ func toInt64(v any) int64 {
 		return int64(n)
 	case float64:
 		return int64(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return i
 	default:
 		return 0
 	}

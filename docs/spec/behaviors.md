@@ -93,3 +93,21 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
 - **Input subset:** `Chain.Emit` rejects `float32` and `float64` values before record hashing
   so emitted records stay in the integer/string/bool/null/array/object subset described by
   ADR-001 and ADR-002.
+
+## B-008 — Build a checkpoint payload
+
+- **Trigger:** `Chain.BuildCheckpointPayload(logID, issuedAt)` from internal checkpoint code.
+- **Response:** A `CheckpointPayload` with constants `format:"audit-trail-checkpoint-v1"`,
+  `version:1`, `contract:"audit-trail-v1"`, `hash_algorithm:"sha256-linear-chain-v1"`, the
+  caller's `log_id` and `issued_at`, and head fields derived from the verified on-disk chain.
+- **Disk-backed head:** The builder uses the same disk walk as `Verify()`. It derives
+  `tree_size`, `last_seq`, and `root_hash` from the verified on-disk chain, not from
+  in-memory `Chain` state.
+- **Empty log:** An intact empty logfile returns `tree_size:0`, `last_seq:-1`, and
+  `root_hash` equal to `Genesis` (64 zeros).
+- **Failure modes:** A tampered, malformed, unreadable, or fractional-number logfile fails
+  closed with an invalid checkpoint-log error and no payload.
+- **Canonical bytes:** `CheckpointPayloadBytes(payload)` returns
+  `canonical(checkpoint.payload)`, excluding future signature envelope fields. The helper is
+  the single signing-byte source for future signing, verification, fixtures, and fitness
+  checks.

@@ -49,6 +49,32 @@ own input.
 `seq` and `prevHash` are **derived state** — reconstructed from disk by `loadState()` on open.
 The in-memory copy is never trusted by `Verify()`.
 
+## Checkpoint payload
+
+`CheckpointPayload` is the deterministic, unsigned statement over a verified on-disk chain
+head. It is the object whose canonical bytes feed future signing and verification helpers.
+
+| Field | Type | Source | Notes |
+|-------|------|--------|-------|
+| `format` | string | constant | Literal `audit-trail-checkpoint-v1`. |
+| `version` | int | constant | Literal `1`. |
+| `contract` | string | constant | Literal `audit-trail-v1`. |
+| `log_id` | string | operator/config | Stable identifier for this log. |
+| `tree_size` | int | verified logfile | Number of nonblank records in the on-disk chain. |
+| `last_seq` | int | verified logfile | Last record sequence number; `-1` when `tree_size` is `0`. |
+| `root_hash` | string | verified logfile | Current chain head; `Genesis` (64 zeros) for an empty log. |
+| `hash_algorithm` | string | constant | Literal `sha256-linear-chain-v1`. |
+| `issued_at` | int | caller | Unix seconds when the checkpoint payload is created. |
+
+`BuildCheckpointPayload` derives `tree_size`, `last_seq`, and `root_hash` from the verified
+disk state used by `Verify()`, not from the `Chain`'s in-memory `seq` or `prevHash`. Empty logs
+produce `tree_size:0`, `last_seq:-1`, and `root_hash:Genesis`. Tampered, malformed, or
+fractional-number logs fail closed and do not return a payload.
+
+`CheckpointPayloadBytes` canonicalizes exactly the payload object with the same sorted-key,
+no-insignificant-whitespace JCS subset used for audit records. Signature envelopes and key
+metadata are outside this task's data model.
+
 ## Wire / interchange formats
 
 - **IPC request:** newline-terminated JSON, `{"op":"emit","event":{…}}` / `{"op":"verify"}` /
