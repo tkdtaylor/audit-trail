@@ -5,7 +5,7 @@
 Add standard-library checkpoint signing and signature verification over the deterministic
 payload bytes from task 005.
 
-Design decision: task 004's signed-checkpoints ADR.
+Design decision: [ADR-003](../../architecture/decisions/003-signed-checkpoints.md).
 
 ## Requirements
 

@@ -5,7 +5,7 @@
 Expose signed checkpoint creation and verification through the ADR-approved runtime surfaces
 while preserving the frozen v1 `emit` and `verify` shapes.
 
-Design decision: task 004's signed-checkpoints ADR.
+Design decision: [ADR-003](../../architecture/decisions/003-signed-checkpoints.md).
 
 ## Requirements
 

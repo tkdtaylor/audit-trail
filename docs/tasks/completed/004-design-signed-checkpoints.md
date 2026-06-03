@@ -6,6 +6,8 @@ Write the signed-checkpoints ADR before implementation so the integrity-core sha
 what checkpoint bytes mean, what gets signed, how keys are configured, and which runtime
 surfaces expose the feature without changing the frozen v1 `emit` / `verify` contract.
 
+Design decision: [ADR-003](../../architecture/decisions/003-signed-checkpoints.md).
+
 ## Requirements
 
 - REQ-004-01: Add an ADR for signed checkpoints under
