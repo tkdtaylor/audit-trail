@@ -2,3 +2,4 @@
 *.log
 *.sock
 /audit-trail
+.claude/sessions/
