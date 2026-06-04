@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	rekorFixturePublicKey  = "testdata/checkpoints/rekor-public.pem"
-	rekorFixtureCheckpoint = "testdata/checkpoints/rekor-checkpoint.json"
-	rekorFixtureReceipt    = "testdata/checkpoints/rekor-receipt.json"
+	rekorFixturePublicKey   = "testdata/checkpoints/rekor-public.pem"
+	rekorFixtureCheckpoint  = "testdata/checkpoints/rekor-checkpoint.json"
+	rekorFixtureReceipt     = "testdata/checkpoints/rekor-receipt.json"
 	rekorFixtureOperatorPub = "testdata/checkpoints/fixture-public.pem"
 )
 
