@@ -24,7 +24,7 @@
 | 010 | Rekor client core | [010-rekor-client-core-test-spec.md](010-rekor-client-core-test-spec.md) | Spec complete; TC-010-01..04 passed | 🟡 | L2: unit-test-only; no runtime surface. `make check` -> `ok github.com/tkdtaylor/audit-trail`; `make fitness` -> `fitness: all wired checks passed` |
 | 011 | Offline and online anchor verification | [011-anchor-verification-test-spec.md](011-anchor-verification-test-spec.md) | Spec complete; TC-011-01..03 passed | ✅ | L2: unit-test-only; no runtime surface. `make check` -> `ok github.com/tkdtaylor/audit-trail`; `make fitness` -> `fitness: all wired checks passed` |
 | 012 | Anchoring runtime surface | [012-anchoring-runtime-surface-test-spec.md](012-anchoring-runtime-surface-test-spec.md) | Spec complete; TC-012-01..05 passed | ✅ | L5: validation harness exercises CLI and IPC socket paths. `go test -v -run TestRekorRuntimeIntegration` -> `ok github.com/tkdtaylor/audit-trail 0.608s` |
-| 013 | Anchoring fitness and fixtures | [013-anchoring-fitness-fixtures-test-spec.md](013-anchoring-fitness-fixtures-test-spec.md) | Spec complete; TC-013-01..04 passed | ⏳ | L3: make fitness-anchor-stability and fitness-anchor-tamper-detection pass |
+| 013 | Anchoring fitness and fixtures | [013-anchoring-fitness-fixtures-test-spec.md](013-anchoring-fitness-fixtures-test-spec.md) | Spec complete; TC-013-01..04 passed | ✅ | L5: fixture verification tests exercise committed `testdata/checkpoints/rekor-*` fixtures; `make fitness-anchor-stability` -> `ok github.com/tkdtaylor/audit-trail 0.004s`; `make fitness-anchor-tamper-detection` -> `ok github.com/tkdtaylor/audit-trail 0.003s`; umbrella `make fitness` includes both and ends `fitness: all wired checks passed`; `make check` -> `go build ./...` |
 
 
 
