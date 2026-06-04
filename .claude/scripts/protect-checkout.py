@@ -107,7 +107,7 @@ def main():
         sys.exit(0)
 
     tool_name = hook_input.get("tool_name", "")
-    if tool_name != "Bash":
+    if tool_name not in {"Bash", "run_command"}:
         sys.exit(0)
 
     command = hook_input.get("tool_input", {}).get("command", "")
