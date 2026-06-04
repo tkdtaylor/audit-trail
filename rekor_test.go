@@ -2,6 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -12,6 +17,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -306,4 +313,415 @@ func TestSubmitCheckpointErrors(t *testing.T) {
 			t.Errorf("expected empty response error message, got %q", err.Error())
 		}
 	})
+}
+
+func TestLoadRekorPublicKey(t *testing.T) {
+	// TC-011-01: Unit tests verify loading valid and invalid Rekor public key PEM files.
+	dir := t.TempDir()
+
+	// 1. Valid ECDSA key
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaDer, err := x509.MarshalPKIXPublicKey(&ecdsaKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ecdsaPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: ecdsaDer})
+	ecdsaPath := filepath.Join(dir, "ecdsa.pem")
+	if err := os.WriteFile(ecdsaPath, ecdsaPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loadedECDSA, err := LoadRekorPublicKey(ecdsaPath)
+	if err != nil {
+		t.Fatalf("failed to load valid ECDSA key: %v", err)
+	}
+	if _, ok := loadedECDSA.(*ecdsa.PublicKey); !ok {
+		t.Fatalf("expected ECDSA public key, got %T", loadedECDSA)
+	}
+
+	// 2. Valid Ed25519 key
+	edPub, edPriv, err := ed25519.GenerateKey(rand.Reader)
+	_ = edPriv
+	if err != nil {
+		t.Fatal(err)
+	}
+	edDer, err := x509.MarshalPKIXPublicKey(edPub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: edDer})
+	edPath := filepath.Join(dir, "ed25519.pem")
+	if err := os.WriteFile(edPath, edPEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	loadedEd, err := LoadRekorPublicKey(edPath)
+	if err != nil {
+		t.Fatalf("failed to load valid Ed25519 key: %v", err)
+	}
+	if _, ok := loadedEd.(ed25519.PublicKey); !ok {
+		t.Fatalf("expected Ed25519 public key, got %T", loadedEd)
+	}
+
+	// 3. Error cases
+	cases := []struct {
+		name    string
+		content []byte
+	}{
+		{
+			name:    "not PEM",
+			content: []byte("not pem"),
+		},
+		{
+			name:    "wrong block type",
+			content: pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: ecdsaDer}),
+		},
+		{
+			name:    "trailing data",
+			content: append(ecdsaPEM, []byte("trailing")...),
+		},
+		{
+			name:    "invalid public key DER",
+			content: pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: []byte("invalid der")}),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, tc.name+".pem")
+			if err := os.WriteFile(path, tc.content, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := LoadRekorPublicKey(path)
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestVerifyRekorReceiptOffline(t *testing.T) {
+	// TC-011-02: Offline verification tests verify that modified SET signatures or modified checkpoint fields fail to verify.
+	rekorKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	operatorKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operatorDer, err := x509.MarshalPKIXPublicKey(&operatorKey.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Sign a checkpoint
+	opEdPriv, opEdPub := deterministicCheckpointKey(1)
+	opEdPubDer, err := x509.MarshalPKIXPublicKey(opEdPub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := mustSignCheckpoint(t, validCheckpointPayload(), opEdPriv)
+
+	hr, err := CheckpointHashedRekord(checkpoint, opEdPubDer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalBytes, err := CanonicalHashedRekordBytes(hr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyStr := base64.StdEncoding.EncodeToString(canonicalBytes)
+
+	logIndex := int64(42)
+	integratedTime := int64(1700000000)
+	logID := "c0ee4787a2da8cb5f41fa6e0a8b9f0ee"
+	setSig := signMockSET(t, rekorKey, bodyStr, integratedTime, logID, logIndex)
+
+	receipt := RekorReceipt{
+		LogID:                logID,
+		LogIndex:             logIndex,
+		IntegratedTime:       integratedTime,
+		SignedEntryTimestamp: setSig,
+		EntryID:              "dummy-entry-id",
+	}
+
+	// 1. Success case
+	err = VerifyRekorReceiptOffline(receipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+	if err != nil {
+		t.Fatalf("offline verification failed: %v", err)
+	}
+
+	// 2. Mismatched/altered signature
+	t.Run("altered signature", func(t *testing.T) {
+		badSigBytes, err := base64.StdEncoding.DecodeString(receipt.SignedEntryTimestamp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		badSigBytes[0] ^= 0xFF
+		badReceipt := receipt
+		badReceipt.SignedEntryTimestamp = base64.StdEncoding.EncodeToString(badSigBytes)
+		err = VerifyRekorReceiptOffline(badReceipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on altered signature, got nil")
+		}
+	})
+
+	// 3. Altered checkpoint root hash
+	t.Run("altered checkpoint root hash", func(t *testing.T) {
+		badCheckpoint := checkpoint
+		badCheckpoint.Payload.RootHash = strings.Repeat("2", 64)
+		err = VerifyRekorReceiptOffline(receipt, badCheckpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on altered checkpoint payload, got nil")
+		}
+	})
+
+	// 4. Altered receipt logIndex
+	t.Run("altered receipt logIndex", func(t *testing.T) {
+		badReceipt := receipt
+		badReceipt.LogIndex = 999
+		err = VerifyRekorReceiptOffline(badReceipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on altered logIndex, got nil")
+		}
+	})
+
+	// 5. Mismatched Rekor public key
+	t.Run("mismatched public key", func(t *testing.T) {
+		wrongRekorKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = VerifyRekorReceiptOffline(receipt, checkpoint, opEdPubDer, &wrongRekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on mismatched public key, got nil")
+		}
+	})
+
+	// 6. Mismatched operator public key PEM
+	t.Run("mismatched operator public key", func(t *testing.T) {
+		err = VerifyRekorReceiptOffline(receipt, checkpoint, operatorDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on mismatched operator key, got nil")
+		}
+	})
+}
+
+func TestVerifyRekorReceiptOnline(t *testing.T) {
+	// TC-011-03: Mock HTTP server tests verify that online verification fails if Rekor returns different entry data.
+	rekorKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opEdPriv, opEdPub := deterministicCheckpointKey(1)
+	opEdPubDer, err := x509.MarshalPKIXPublicKey(opEdPub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := mustSignCheckpoint(t, validCheckpointPayload(), opEdPriv)
+
+	hr, err := CheckpointHashedRekord(checkpoint, opEdPubDer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalBytes, err := CanonicalHashedRekordBytes(hr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodyStr := base64.StdEncoding.EncodeToString(canonicalBytes)
+
+	logIndex := int64(100)
+	integratedTime := int64(1700000100)
+	logID := "c0ee4787a2da8cb5f41fa6e0a8b9f0ee"
+	setSig := signMockSET(t, rekorKey, bodyStr, integratedTime, logID, logIndex)
+
+	receipt := RekorReceipt{
+		LogID:                logID,
+		LogIndex:             logIndex,
+		IntegratedTime:       integratedTime,
+		SignedEntryTimestamp: setSig,
+		EntryID:              "abcd1234ef",
+	}
+
+	t.Run("matching entry succeeds", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			if r.URL.Path != "/api/v1/log/entries/abcd1234ef" {
+				t.Errorf("expected path /api/v1/log/entries/abcd1234ef, got %s", r.URL.Path)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			respJSON := fmt.Sprintf(`{
+				"abcd1234ef": {
+					"body": %q,
+					"integratedTime": %d,
+					"logID": %q,
+					"logIndex": %d,
+					"verification": {
+						"signedEntryTimestamp": %q
+					}
+				}
+			}`, bodyStr, integratedTime, logID, logIndex, setSig)
+			w.Write([]byte(respJSON))
+		}))
+		defer server.Close()
+
+		client := NewRekorClient(server.URL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), receipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err != nil {
+			t.Fatalf("expected successful online verification, got %v", err)
+		}
+	})
+
+	t.Run("query by logIndex succeeds", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != "GET" {
+				t.Errorf("expected GET, got %s", r.Method)
+			}
+			if r.URL.Path != "/api/v1/log/entries" || r.URL.Query().Get("logIndex") != "100" {
+				t.Errorf("expected path /api/v1/log/entries?logIndex=100, got %s?%s", r.URL.Path, r.URL.RawQuery)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			respJSON := fmt.Sprintf(`{
+				"abcd1234ef": {
+					"body": %q,
+					"integratedTime": %d,
+					"logID": %q,
+					"logIndex": %d,
+					"verification": {
+						"signedEntryTimestamp": %q
+					}
+				}
+			}`, bodyStr, integratedTime, logID, logIndex, setSig)
+			w.Write([]byte(respJSON))
+		}))
+		defer server.Close()
+
+		noIDReceipt := receipt
+		noIDReceipt.EntryID = ""
+
+		client := NewRekorClient(server.URL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), noIDReceipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err != nil {
+			t.Fatalf("expected successful online verification by index, got %v", err)
+		}
+	})
+
+	t.Run("body hash mismatch", func(t *testing.T) {
+		badCheckpoint := checkpoint
+		badCheckpoint.Payload.RootHash = strings.Repeat("3", 64)
+		badHR, err := CheckpointHashedRekord(badCheckpoint, opEdPubDer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		badCanonicalBytes, err := CanonicalHashedRekordBytes(badHR)
+		if err != nil {
+			t.Fatal(err)
+		}
+		badBodyStr := base64.StdEncoding.EncodeToString(badCanonicalBytes)
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			respJSON := fmt.Sprintf(`{
+				"abcd1234ef": {
+					"body": %q,
+					"integratedTime": %d,
+					"logID": %q,
+					"logIndex": %d,
+					"verification": {
+						"signedEntryTimestamp": %q
+					}
+				}
+			}`, badBodyStr, integratedTime, logID, logIndex, setSig)
+			w.Write([]byte(respJSON))
+		}))
+		defer server.Close()
+
+		client := NewRekorClient(server.URL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), receipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on body hash mismatch, got nil")
+		}
+	})
+
+	t.Run("metadata mismatch", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			respJSON := fmt.Sprintf(`{
+				"abcd1234ef": {
+					"body": %q,
+					"integratedTime": %d,
+					"logID": "different-log-id",
+					"logIndex": %d,
+					"verification": {
+						"signedEntryTimestamp": %q
+					}
+				}
+			}`, bodyStr, integratedTime, logIndex, setSig)
+			w.Write([]byte(respJSON))
+		}))
+		defer server.Close()
+
+		client := NewRekorClient(server.URL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), receipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on logID mismatch, got nil")
+		}
+	})
+
+	t.Run("http server 500 error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client := NewRekorClient(server.URL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), receipt, checkpoint, opEdPubDer, &rekorKey.PublicKey)
+		if err == nil {
+			t.Fatal("expected failure on server 500, got nil")
+		}
+	})
+}
+
+func signMockSET(t *testing.T, rekorPriv crypto.PrivateKey, body string, integratedTime int64, logID string, logIndex int64) string {
+	t.Helper()
+	m := map[string]any{
+		"body":           body,
+		"integratedTime": integratedTime,
+		"logID":          logID,
+		"logIndex":       logIndex,
+	}
+	payloadBytes, err := canonical(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var sig []byte
+	switch priv := rekorPriv.(type) {
+	case *ecdsa.PrivateKey:
+		hash := sha256.Sum256(payloadBytes)
+		sig, err = ecdsa.SignASN1(rand.Reader, priv, hash[:])
+		if err != nil {
+			t.Fatal(err)
+		}
+	case ed25519.PrivateKey:
+		sig = ed25519.Sign(priv, payloadBytes)
+	default:
+		t.Fatalf("unsupported private key type for signing SET mock: %T", rekorPriv)
+	}
+
+	return base64.StdEncoding.EncodeToString(sig)
 }
