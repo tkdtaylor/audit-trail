@@ -1,4 +1,4 @@
-.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-gofmt
+.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt
 
 build:
 	go build -o bin/audit-trail ./...
@@ -13,7 +13,7 @@ check:
 fmt:
 	go fmt ./...
 
-fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-gofmt
+fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt
 	@echo "fitness: all wired checks passed"
 
 fitness-no-deps:
@@ -37,6 +37,13 @@ fitness-checkpoint-stability:
 
 fitness-checkpoint-tamper-detection:
 	go test ./... -run '^TestCheckpointTamperFixtureDetection$$'
+
+fitness-anchor-stability:
+	go test ./... -run '^TestRekorFixtureVerifies$$'
+
+fitness-anchor-tamper-detection:
+	go test ./... -run '^TestRekorTamperFixtureDetection$$'
+
 
 fitness-gofmt:
 	@tmp="$$(mktemp)"; \
