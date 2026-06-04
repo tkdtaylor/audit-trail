@@ -16,7 +16,11 @@
 package main
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"os"
@@ -53,6 +57,8 @@ func cmdServe(args []string) {
 	checkpointLogID := fs.String("checkpoint-log-id", "", "checkpoint log identifier")
 	checkpointSigningKey := fs.String("checkpoint-signing-key", "", "checkpoint signing key PEM path")
 	checkpointPublicKey := fs.String("checkpoint-public-key", "", "checkpoint verification public key PEM path")
+	rekorURL := fs.String("rekor-url", "", "Rekor transparency log server URL")
+	rekorPublicKey := fs.String("rekor-public-key", "", "Rekor server public key PEM path")
 	fs.Parse(args)
 	if *socket == "" {
 		fmt.Fprintln(os.Stderr, "serve: --socket is required")
@@ -62,9 +68,11 @@ func cmdServe(args []string) {
 	check(err)
 	fmt.Fprintf(os.Stderr, "audit-trail serving on %s (log=%s)\n", *socket, *logfile)
 	check(serve(*socket, chain, CheckpointServerConfig{
-		LogID:          *checkpointLogID,
-		SigningKeyPath: *checkpointSigningKey,
-		PublicKeyPath:  *checkpointPublicKey,
+		LogID:              *checkpointLogID,
+		SigningKeyPath:     *checkpointSigningKey,
+		PublicKeyPath:      *checkpointPublicKey,
+		RekorURL:           *rekorURL,
+		RekorPublicKeyPath: *rekorPublicKey,
 	}))
 }
 
@@ -112,13 +120,17 @@ func cmdCheckpoint(args []string) {
 		cmdCheckpointCreate(args[1:])
 	case "verify":
 		cmdCheckpointVerify(args[1:])
+	case "anchor":
+		cmdCheckpointAnchor(args[1:])
+	case "verify-anchor":
+		cmdCheckpointVerifyAnchor(args[1:])
 	default:
 		checkpointUsage()
 	}
 }
 
 func checkpointUsage() {
-	fmt.Fprintln(os.Stderr, "usage: audit-trail checkpoint <create|verify> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: audit-trail checkpoint <create|verify|anchor|verify-anchor> [flags]")
 	os.Exit(2)
 }
 
@@ -203,4 +215,201 @@ func check(err error) {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func cmdCheckpointAnchor(args []string) {
+	fs := flag.NewFlagSet("checkpoint anchor", flag.ExitOnError)
+	checkpointPath := fs.String("checkpoint", "", "checkpoint JSON path (required)")
+	rekorURL := fs.String("rekor-url", "", "Rekor transparency log server URL (required)")
+	publicKeyPath := fs.String("public-key", "", "PEM Ed25519 public key path (required)")
+	outPath := fs.String("out", "", "write receipt JSON to path instead of stdout")
+	fs.Parse(args)
+	if *checkpointPath == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint anchor: --checkpoint is required")
+		os.Exit(2)
+	}
+	if *rekorURL == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint anchor: --rekor-url is required")
+		os.Exit(2)
+	}
+	if *publicKeyPath == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint anchor: --public-key is required")
+		os.Exit(2)
+	}
+
+	checkpointData, err := os.ReadFile(*checkpointPath)
+	check(err)
+	checkpoint, err := DecodeSignedCheckpoint(checkpointData)
+	check(err)
+
+	pubKeyPEM, err := os.ReadFile(*publicKeyPath)
+	check(err)
+
+	client := NewRekorClient(*rekorURL)
+	receipt, err := client.SubmitCheckpoint(context.Background(), checkpoint, pubKeyPEM)
+	check(err)
+
+	if *outPath != "" {
+		check(writeJSONFile(*outPath, receipt))
+		return
+	}
+	printJSON(receipt)
+}
+
+func cmdCheckpointVerifyAnchor(args []string) {
+	fs := flag.NewFlagSet("checkpoint verify-anchor", flag.ExitOnError)
+	checkpointPath := fs.String("checkpoint", "", "checkpoint JSON path (required)")
+	receiptPath := fs.String("receipt", "", "Rekor receipt JSON path (required)")
+	rekorPublicKeyPath := fs.String("rekor-public-key", "", "Rekor public key PEM path (required)")
+	rekorURL := fs.String("rekor-url", "", "optional Rekor transparency log server URL for online verification")
+	publicKeyPath := fs.String("public-key", "", "PEM Ed25519 public key path (optional, required for offline verification)")
+	fs.Parse(args)
+
+	if *checkpointPath == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint verify-anchor: --checkpoint is required")
+		os.Exit(2)
+	}
+	if *receiptPath == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint verify-anchor: --receipt is required")
+		os.Exit(2)
+	}
+	if *rekorPublicKeyPath == "" {
+		fmt.Fprintln(os.Stderr, "checkpoint verify-anchor: --rekor-public-key is required")
+		os.Exit(2)
+	}
+
+	checkpointData, err := os.ReadFile(*checkpointPath)
+	check(err)
+	checkpoint, err := DecodeSignedCheckpoint(checkpointData)
+	check(err)
+
+	receiptData, err := os.ReadFile(*receiptPath)
+	check(err)
+	var receipt RekorReceipt
+	err = json.Unmarshal(receiptData, &receipt)
+	check(err)
+
+	rekorPubKey, err := LoadRekorPublicKey(*rekorPublicKeyPath)
+	check(err)
+
+	var operatorPubKeyPEM []byte
+	var operatorPubKey ed25519.PublicKey
+
+	if *publicKeyPath != "" {
+		operatorPubKeyPEM, err = os.ReadFile(*publicKeyPath)
+		check(err)
+		operatorPubKey, err = LoadCheckpointVerificationKey(*publicKeyPath)
+		check(err)
+	}
+
+	var res RekorCheckpointVerificationResult
+	res.Valid = true
+	res.SignatureValid = true
+	res.RekorValid = true
+
+	// Check if operator public key was supplied
+	if len(operatorPubKeyPEM) > 0 {
+		// Verify checkpoint signature locally
+		sigVer := VerifySignedCheckpoint(checkpoint, operatorPubKey)
+		if !sigVer.Valid {
+			res.Valid = false
+			res.SignatureValid = false
+			res.Message = "checkpoint signature verification failed: " + sigVer.Message
+			printJSON(res)
+			os.Exit(1)
+		}
+	} else if *rekorURL == "" {
+		// Offline and no operator public key
+		fmt.Fprintln(os.Stderr, "checkpoint verify-anchor: --public-key is required for offline verification")
+		os.Exit(2)
+	}
+
+	if *rekorURL != "" {
+		client := NewRekorClient(*rekorURL)
+		err = client.VerifyRekorReceiptOnline(context.Background(), receipt, checkpoint, operatorPubKeyPEM, rekorPubKey)
+		var onlineMatch bool
+		if err != nil {
+			onlineMatch = false
+			res.Valid = false
+			res.RekorValid = false
+			res.RekorOnlineMatch = &onlineMatch
+			res.Message = "online verification failed: " + err.Error()
+		} else {
+			onlineMatch = true
+			res.RekorOnlineMatch = &onlineMatch
+			// If operatorPubKey was not supplied, we can now verify checkpoint signature using extracted key
+			if len(operatorPubKeyPEM) == 0 {
+				var fetchedBodyStr string
+				if receipt.EntryID != "" {
+					_, fetchedBodyStr, err = client.GetEntryByID(context.Background(), receipt.EntryID)
+				} else {
+					_, fetchedBodyStr, err = client.GetEntryByIndex(context.Background(), receipt.LogIndex)
+				}
+				if err != nil {
+					res.Valid = false
+					res.Message = "failed to fetch entry for signature verification: " + err.Error()
+					printJSON(res)
+					os.Exit(1)
+				}
+				extractedPEM, err := ExtractOperatorPublicKeyPEM(fetchedBodyStr)
+				if err != nil {
+					res.Valid = false
+					res.Message = "failed to extract operator public key: " + err.Error()
+					printJSON(res)
+					os.Exit(1)
+				}
+				block, _ := pem.Decode(extractedPEM)
+				if block == nil {
+					res.Valid = false
+					res.Message = "extracted operator public key is not PEM"
+					printJSON(res)
+					os.Exit(1)
+				}
+				key, err := x509.ParsePKIXPublicKey(block.Bytes)
+				if err != nil {
+					res.Valid = false
+					res.Message = "failed to parse extracted operator public key: " + err.Error()
+					printJSON(res)
+					os.Exit(1)
+				}
+				extractedPubKey, ok := key.(ed25519.PublicKey)
+				if !ok {
+					res.Valid = false
+					res.Message = "extracted operator public key is not Ed25519"
+					printJSON(res)
+					os.Exit(1)
+				}
+				sigVer := VerifySignedCheckpoint(checkpoint, extractedPubKey)
+				if !sigVer.Valid {
+					res.Valid = false
+					res.SignatureValid = false
+					res.Message = "checkpoint signature verification failed with extracted key: " + sigVer.Message
+				}
+			}
+		}
+	} else {
+		// Offline verification
+		err = VerifyRekorReceiptOffline(receipt, checkpoint, operatorPubKeyPEM, rekorPubKey)
+		if err != nil {
+			res.Valid = false
+			res.RekorValid = false
+			res.Message = "offline verification failed: " + err.Error()
+		}
+	}
+
+	if res.Valid {
+		res.Message = "verification succeeded"
+	}
+	printJSON(res)
+	if !res.Valid {
+		os.Exit(1)
+	}
+}
+
+type RekorCheckpointVerificationResult struct {
+	Valid            bool   `json:"valid"`
+	SignatureValid   bool   `json:"signature_valid"`
+	RekorValid       bool   `json:"rekor_valid"`
+	RekorOnlineMatch *bool  `json:"rekor_online_match"`
+	Message          string `json:"message"`
 }

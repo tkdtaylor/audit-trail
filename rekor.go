@@ -359,14 +359,29 @@ func (rc *RekorClient) GetEntryByIndex(ctx context.Context, logIndex int64) (Rek
 	return rc.fetchEntry(ctx, fmt.Sprintf("/api/v1/log/entries?logIndex=%d", logIndex))
 }
 
-// VerifyRekorReceiptOnline performs offline verification, then fetches the entry from Rekor and validates that it matches.
-func (rc *RekorClient) VerifyRekorReceiptOnline(ctx context.Context, receipt RekorReceipt, checkpoint SignedCheckpoint, operatorPubKeyPEM []byte, rekorPubKey crypto.PublicKey) error {
-	// 1. Perform offline verification first
-	if err := VerifyRekorReceiptOffline(receipt, checkpoint, operatorPubKeyPEM, rekorPubKey); err != nil {
-		return fmt.Errorf("offline verification failed: %w", err)
+// ExtractOperatorPublicKeyPEM decodes the entry body and extracts the operator public key PEM.
+func ExtractOperatorPublicKeyPEM(fetchedBodyStr string) ([]byte, error) {
+	bodyBytes, err := base64.StdEncoding.DecodeString(fetchedBodyStr)
+	if err != nil {
+		return nil, fmt.Errorf("decode fetched entry body base64: %w", err)
 	}
 
-	// 2. Fetch the entry from Rekor (try by EntryID/UUID first, then fallback to LogIndex)
+	var fetchedHR HashedRekord
+	if err := json.Unmarshal(bodyBytes, &fetchedHR); err != nil {
+		return nil, fmt.Errorf("parse fetched entry body JSON: %w", err)
+	}
+
+	pubKeyPEM, err := base64.StdEncoding.DecodeString(fetchedHR.Spec.Signature.PublicKey.Content)
+	if err != nil {
+		return nil, fmt.Errorf("decode fetched operator public key PEM: %w", err)
+	}
+
+	return pubKeyPEM, nil
+}
+
+// VerifyRekorReceiptOnline performs offline verification, then fetches the entry from Rekor and validates that it matches.
+func (rc *RekorClient) VerifyRekorReceiptOnline(ctx context.Context, receipt RekorReceipt, checkpoint SignedCheckpoint, operatorPubKeyPEM []byte, rekorPubKey crypto.PublicKey) error {
+	// 1. Fetch the entry from Rekor (try by EntryID/UUID first, then fallback to LogIndex)
 	var fetchedReceipt RekorReceipt
 	var fetchedBodyStr string
 	var err error
@@ -379,7 +394,20 @@ func (rc *RekorClient) VerifyRekorReceiptOnline(ctx context.Context, receipt Rek
 		return fmt.Errorf("fetch entry from Rekor: %w", err)
 	}
 
-	// 3. Compare metadata fields
+	// 2. If operatorPubKeyPEM is empty, extract it from the fetched entry body
+	if len(operatorPubKeyPEM) == 0 {
+		operatorPubKeyPEM, err = ExtractOperatorPublicKeyPEM(fetchedBodyStr)
+		if err != nil {
+			return fmt.Errorf("extract operator public key: %w", err)
+		}
+	}
+
+	// 3. Perform offline verification
+	if err := VerifyRekorReceiptOffline(receipt, checkpoint, operatorPubKeyPEM, rekorPubKey); err != nil {
+		return fmt.Errorf("offline verification failed: %w", err)
+	}
+
+	// 4. Compare metadata fields
 	if fetchedReceipt.LogID != receipt.LogID {
 		return fmt.Errorf("log ID mismatch: local %q, fetched %q", receipt.LogID, fetchedReceipt.LogID)
 	}
@@ -393,7 +421,7 @@ func (rc *RekorClient) VerifyRekorReceiptOnline(ctx context.Context, receipt Rek
 		return fmt.Errorf("SET signature mismatch: local %q, fetched %q", receipt.SignedEntryTimestamp, fetchedReceipt.SignedEntryTimestamp)
 	}
 
-	// 4. Decode and parse the fetched body
+	// 5. Decode and parse the fetched body
 	bodyBytes, err := base64.StdEncoding.DecodeString(fetchedBodyStr)
 	if err != nil {
 		return fmt.Errorf("decode fetched entry body base64: %w", err)
@@ -404,13 +432,13 @@ func (rc *RekorClient) VerifyRekorReceiptOnline(ctx context.Context, receipt Rek
 		return fmt.Errorf("parse fetched entry body JSON: %w", err)
 	}
 
-	// 5. Reconstruct local HashedRekord
+	// 6. Reconstruct local HashedRekord
 	localHR, err := CheckpointHashedRekord(checkpoint, operatorPubKeyPEM)
 	if err != nil {
 		return fmt.Errorf("reconstruct local hashedrekord: %w", err)
 	}
 
-	// 6. Compare HashedRekord fields
+	// 7. Compare HashedRekord fields
 	if fetchedHR.Kind != localHR.Kind {
 		return fmt.Errorf("entry kind mismatch: expected %q, got %q", localHR.Kind, fetchedHR.Kind)
 	}

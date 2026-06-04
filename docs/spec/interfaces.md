@@ -10,11 +10,13 @@ audit-trail <serve|emit|verify|checkpoint> [flags]
 
 | Subcommand | Flags | Behavior |
 |------------|-------|----------|
-| `serve` | `--socket <path>` (required), `--logfile <path>` (default `audit.log`), `--checkpoint-log-id <id>`, `--checkpoint-signing-key <private-pem>`, `--checkpoint-public-key <public-pem>` | Run the IPC daemon. Errors to stderr; exits 2 if `--socket` missing. Checkpoint IPC ops use the configured log ID and key paths; clients do not send key paths per request. |
+| `serve` | `--socket <path>` (required), `--logfile <path>` (default `audit.log`), `--checkpoint-log-id <id>`, `--checkpoint-signing-key <private-pem>`, `--checkpoint-public-key <public-pem>`, `--rekor-url <url>`, `--rekor-public-key <public-pem>` | Run the IPC daemon. Errors to stderr; exits 2 if `--socket` missing. Checkpoint IPC ops use the configured log ID and key paths; clients do not send key paths per request. |
 | `emit` | `--logfile <path>` (default `audit.log`), `--actor`, `--action`, `--target`, `--decision` (optional) | Append one event; prints `{seq,hash}`. `ts` = now. |
 | `verify` | `--logfile <path>` (default `audit.log`) | Walk the chain; prints the result. **Exit 0 = valid, 1 = invalid.** |
 | `checkpoint create` | `--logfile <path>` (default `audit.log`), `--log-id <id>` (required), `--signing-key <private-pem>` (required), `--out <path>` (optional) | Verify the on-disk log, build a checkpoint payload from that verified head, sign it, and print the signed checkpoint envelope or write it to `--out`. |
 | `checkpoint verify` | `--checkpoint <path>` (required), `--public-key <public-pem>` (required), `--logfile <path>` (optional) | Verify a signed checkpoint. If `--logfile` is present, also verify the log and compare its head to the checkpoint. **Exit 0 = valid, 1 = invalid.** |
+| `checkpoint anchor` | `--checkpoint <path>` (required), `--rekor-url <url>` (required), `--public-key <public-pem>` (required), `--out <path>` (optional) | Submit a signed checkpoint to Rekor and write the returned receipt to `--out` or stdout. |
+| `checkpoint verify-anchor` | `--checkpoint <path>` (required), `--receipt <path>` (required), `--rekor-public-key <public-pem>` (required), `--rekor-url <url>` (optional), `--public-key <public-pem>` (optional) | Verify a signed checkpoint and its Rekor receipt. Triggers online verification if `--rekor-url` is supplied. **Exit 0 = valid, 1 = invalid.** |
 
 Unknown subcommand or no args → usage to stderr, exit 2.
 
@@ -34,6 +36,8 @@ rejected as client input.
 | `{"op":"ping"}` | `{"ok":true}` | — |
 | `{"op":"checkpoint_create"}` | signed checkpoint envelope object | `checkpoint_not_configured` if `serve` lacks `--checkpoint-log-id` or `--checkpoint-signing-key`; `bad_request` for malformed key material; `invalid_log` for an unverified source log |
 | `{"op":"checkpoint_verify","checkpoint":{…},"compare_log":true}` | `{"valid":bool,"signature_valid":bool,"log_match":bool|null,"message":"…"}` | `checkpoint_not_configured` if `serve` lacks `--checkpoint-public-key`; `bad_request` for missing or malformed checkpoint/key material |
+| `{"op":"checkpoint_anchor"}` | RekorReceipt object | `checkpoint_not_configured` if `serve` lacks `--rekor-url`, `--rekor-public-key` or operator keys; `internal` for HTTP submit errors |
+| `{"op":"checkpoint_verify","checkpoint":{…},"receipt":{…},"online":bool}` | `{"valid":bool,"signature_valid":bool,"rekor_valid":bool,"rekor_online_match":bool|null,"message":"…"}` | `checkpoint_not_configured` if `serve` lacks keys or `rekor-url` (when online:true); `bad_request` for key-injection attempts or malformed content |
 | unparseable | — | `{"error":{"code":"bad_request",…}}` |
 | unknown `op` | — | `{"error":{"code":"unknown_op","message":"unsupported op","retryable":false}}` |
 | server-side emit failure | — | `{"error":{"code":"internal",…}}` |
@@ -44,6 +48,7 @@ current errors are `retryable:false`.
 IPC ops `checkpoint_create` and `checkpoint_verify` are additive. `checkpoint_verify` uses
 `compare_log:true` to compare against the daemon's configured logfile. If `compare_log` is
 absent or false, it verifies only the checkpoint signature and returns `log_match:null`.
+If `receipt` is present, `checkpoint_verify` performs receipt-based anchor verification (both offline, and online if `online:true`). Clients cannot submit key paths or URLs to the daemon; any request containing configuration-override fields is rejected with `bad_request` to prevent SSRF and key-injection.
 
 ## Internal Go API ([chain.go](../../chain.go))
 

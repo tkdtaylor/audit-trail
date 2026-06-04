@@ -14,16 +14,19 @@ controlled by CLI flags ([main.go](../../main.go)).
 | `--checkpoint-log-id` | serve | `""` | Stable log identifier used by IPC `checkpoint_create`; required with `--checkpoint-signing-key` for that op. |
 | `--checkpoint-signing-key` | serve | `""` | PEM Ed25519 private key path used by IPC `checkpoint_create`; clients do not send key paths per request. |
 | `--checkpoint-public-key` | serve | `""` | PEM Ed25519 public key path used by IPC `checkpoint_verify`; clients do not send key paths per request. |
+| `--rekor-url` | serve, checkpoint anchor, checkpoint verify-anchor | `""` | Rekor transparency log server URL. Triggers online verification for `checkpoint verify-anchor`. |
+| `--rekor-public-key` | serve, checkpoint verify-anchor | `""` | PEM public key path for the Rekor log server. |
 | `--actor` | emit | `""` | Event `actor`. |
 | `--action` | emit | `""` | Event `action`. |
 | `--target` | emit | `""` | Event `target`. |
 | `--decision` | emit | `""` | Event `decision`; omitted from the event when empty. |
 | `--log-id` | checkpoint create | *(required)* | Stable log identifier included in the signed checkpoint payload. |
 | `--signing-key` | checkpoint create | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
-| `--out` | checkpoint create | `""` | Optional checkpoint JSON output path; stdout is used when omitted. |
-| `--checkpoint` | checkpoint verify | *(required)* | Signed checkpoint JSON path to verify. |
-| `--public-key` | checkpoint verify | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key used to verify checkpoint signatures. |
+| `--out` | checkpoint create, checkpoint anchor | `""` | Optional checkpoint/receipt JSON output path; stdout is used when omitted. |
+| `--checkpoint` | checkpoint verify, checkpoint anchor, checkpoint verify-anchor | *(required)* | Signed checkpoint JSON path to verify or anchor. |
+| `--public-key` | checkpoint verify, checkpoint anchor, checkpoint verify-anchor | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key of the operator. Optional for online `checkpoint verify-anchor`. |
 | `--logfile` | checkpoint verify | `""` | Optional JSONL log path to verify and compare against the checkpoint head. |
+| `--receipt` | checkpoint verify-anchor | *(required)* | Rekor receipt JSON path to verify. |
 
 ## Checkpoint key files
 

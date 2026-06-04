@@ -173,3 +173,28 @@ Runtime checkpoint IPC operations are `checkpoint_create` and `checkpoint_verify
   checkpoint creation returns `{error:{code:"invalid_log",...,retryable:false}}`.
 - **v1 preservation:** Existing CLI `emit`/`verify` output and IPC `emit`/`verify`/`ping`,
   unknown-op, and malformed-request shapes are unchanged.
+
+## B-011 — Submit signed checkpoints to Rekor (anchoring)
+
+- **Trigger:** `audit-trail checkpoint anchor …` (CLI) or `{"op":"checkpoint_anchor"}` (IPC).
+- **Response:** `RekorReceipt` object containing `{log_id, log_index, integrated_time, signed_entry_timestamp, entry_id}`.
+- **Side effects:** Decodes the checkpoint, loads the operator public key, and forms a standard Sigstore `hashedrekord` request. Sends a POST request to Rekor's `POST /api/v1/log/entries` endpoint. Decodes and returns the inclusion proof.
+- **SSRF protection:** The daemon will only query the URL configured at startup via `--rekor-url`.
+- **Key-injection protection:** The daemon will only read keys configured at startup.
+
+## B-012 — Verify Rekor anchoring (receipt validation)
+
+- **Trigger:** `audit-trail checkpoint verify-anchor …` (CLI) or receipt-based `checkpoint_verify` (IPC).
+- **Response:** `{valid, signature_valid, rekor_valid, rekor_online_match, message}`.
+- **Offline verification:** Reconstructs the `hashedrekord` from the checkpoint and operator public key PEM. Canonicalizes it using RFC 8785 (JCS) to build the SET payload. Verifies the Rekor server's signature (`signed_entry_timestamp`) against the payload using the Rekor public key.
+- **Online verification:** Performed offline verification first, then fetches the entry from Rekor using UUID (`entry_id`) or log index (`log_index`), and checks that all metadata and entry body fields match the local checkpoint and receipt.
+- **Failure modes:** Any mismatch, invalid signature, or network timeout fails closed, returning `valid:false`.
+
+## B-013 — Expose anchoring through CLI and IPC runtime surfaces
+
+- **CLI anchor trigger:** `audit-trail checkpoint anchor --checkpoint <path> --rekor-url <url> --public-key <path> [--out <path>]`.
+- **CLI verify-anchor trigger:** `audit-trail checkpoint verify-anchor --checkpoint <path> --receipt <path> --rekor-public-key <path> [--rekor-url <url>] [--public-key <path>]`.
+- **IPC anchor trigger:** `{"op":"checkpoint_anchor"}`. Requires `--rekor-url`, `--rekor-public-key`, `--checkpoint-signing-key` and `--checkpoint-log-id` in daemon configuration.
+- **IPC verify trigger:** `{"op":"checkpoint_verify","checkpoint":{…},"receipt":{…},"online":bool}`. Requires `--checkpoint-public-key` and `--rekor-public-key` in daemon configuration.
+- **Rejection of client-submitted config:** IPC requests containing config-override fields (`rekor_url`, `public_key`, `signing_key`, etc.) are explicitly rejected with `bad_request` to prevent SSRF and key-injection.
+
