@@ -14,8 +14,8 @@ picked up* ([decisions/](architecture/decisions/)), then a decomposition into ta
 ## Dependency order
 
 ```
-checkpoints ──► witness / Rekor anchoring     (anchoring needs something to anchor)
-            └─► log rotation / checkpointing  (rotation re-anchors at segment boundaries)
+checkpoints ✅ ──► witness / Rekor anchoring ✅   (anchoring needs something to anchor)
+              └─► log rotation / checkpointing    (rotation re-anchors at segment boundaries)
 
 indexed query API        (independent — additive)
 pluggable backends       (independent — but do last; highest abstraction-leak risk)
@@ -23,13 +23,13 @@ pluggable backends       (independent — but do last; highest abstraction-leak 
 
 ## Items
 
-| Item | Depends on | Risk | Why the risk |
-|---|---|---|---|
-| **Signed checkpoints** (RFC 6962 STH) | — | 🔴 high | Touches the integrity core: key management, signature format, and *what exactly* gets signed. Get the signed-tree-head shape wrong and every downstream anchor inherits it. |
-| **Witness / Rekor anchoring** | checkpoints | 🟠 med | External trust + network failure modes. Must degrade safely — an unreachable witness cannot block or weaken local `emit`/`verify`. |
-| **Log rotation / checkpointing** | checkpoints | 🔴 high | Interacts with two load-bearing invariants: `Verify()` reads from disk, and the single-writer mutex. A rotation boundary is a seam where tamper-detection can silently break. |
-| **Indexed query API** | — | 🟢 low | Additive, read-only. Must not become a second writer or bypass `Verify()`'s disk read. |
-| **Pluggable backends** (Rekor / immudb / Postgres / SQLite) | — | 🟠 med | The contract fights to keep backend specifics *out* of emit/verify. This is the item most likely to leak abstraction into the frozen seam — do it last, when the seam is well-exercised. |
+| Item | Status | Depends on | Risk | Why the risk |
+|---|---|---|---|---|
+| **Signed checkpoints** (RFC 6962 STH) | ✅ shipped — [ADR-003](architecture/decisions/003-signed-checkpoints.md), tasks 004–008 (`checkpoint*.go`), FF-006 wired | — | 🔴 high | Touches the integrity core: key management, signature format, and *what exactly* gets signed. Get the signed-tree-head shape wrong and every downstream anchor inherits it. |
+| **Witness / Rekor anchoring** | ✅ shipped — [ADR-004](architecture/decisions/004-witness-anchoring.md), tasks 009–013 (`rekor*.go`), anchor fitness wired | checkpoints | 🟠 med | External trust + network failure modes. Must degrade safely — an unreachable witness cannot block or weaken local `emit`/`verify`. |
+| **Log rotation / checkpointing** | ❌ not started | checkpoints | 🔴 high | Interacts with two load-bearing invariants: `Verify()` reads from disk, and the single-writer mutex. A rotation boundary is a seam where tamper-detection can silently break. |
+| **Indexed query API** | ❌ not started | — | 🟢 low | Additive, read-only. Must not become a second writer or bypass `Verify()`'s disk read. |
+| **Pluggable backends** (Rekor / immudb / Postgres / SQLite) | ❌ not started | — | 🟠 med | The contract fights to keep backend specifics *out* of emit/verify. This is the item most likely to leak abstraction into the frozen seam — do it last, when the seam is well-exercised. |
 
 ## Discipline
 
