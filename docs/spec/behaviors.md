@@ -36,8 +36,16 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   - Intact: `{valid:true, tamper_detected_at:null, message:"chain intact"}`.
   - Tampered: `valid:false`, `tamper_detected_at` = `seq` of the first broken entry, `message`
     describing the break.
-- **Side effects:** None. Opens and re-reads the logfile from **disk** (not the in-memory
-  chain), walking from `Genesis` forward.
+- **Side effects:** None. Opens and re-reads the log from **disk** (not the in-memory chain),
+  walking from `Genesis` forward.
+- **Single vs multi-segment:** When no manifest is present on disk (a never-rotated log),
+  `Verify()` walks the single active segment at `chain.path` and is byte-for-byte identical to
+  the original single-file behavior — the degenerate 1-segment case. When a manifest is present,
+  `Verify()` loads it and walks **every rotated-out segment in manifest order plus the active
+  segment**, threading the carried ending `prev_hash` and global seq offset from each segment
+  into the next (Genesis/0 for the first). Every segment is read from disk; the in-memory
+  `prevHash`/`seq` are never trusted. The response shape is unchanged: `tamper_detected_at`
+  reports the **global** seq of the first broken record.
 - **CLI exit code:** 0 if valid, **1 if invalid** (so CI can gate on it).
 
 ## B-003 — Detect tampering
@@ -49,8 +57,29 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
     changed) → `"content hash mismatch (tampered)"`.
   - **Corrupted line** — a line is not valid JSON → `"entry is not valid JSON (corrupted)"`,
     `tamper_detected_at` = line index.
-- **Guarantee:** A single-character change to any past entry fails verification
-  (`TestEmitVerifyAndTamperDetection`).
+- **Cross-segment cases** (rotated logs — same root of trust, the SHA-256 chain):
+  - **Seam break** — the first record of segment N+1 must carry `prev_hash` equal to segment N's
+    last `hash`. A reordered, swapped, or seam-tampered segment fails this link and reports
+    `"prev_hash link broken"` at the first record of the offending segment
+    (`TestVerifySeamPrevHashTamper`, `TestVerifyReorderedSegments`).
+  - **Tamper in any segment** — a byte-level change in a rotated-out segment (not just the
+    active one) → `"content hash mismatch (tampered)"` at that record's global seq
+    (`TestVerifyTamperInEarlierSegment`).
+  - **Dropped segment** — a segment listed in the manifest but missing from disk →
+    `valid:false` with a message **naming the missing segment file**
+    (`TestVerifyDroppedSegment`).
+  - **Manifest field tamper** — the manifest is an index, **not** the root of trust. Each
+    segment's walked `start_prev_hash`/`first_seq`/`last_seq`/`end_hash` is cross-checked against
+    the manifest's recorded values; a forged field surfaces as `valid:false`
+    (`TestVerifyTamperedManifestEndHash`, `TestVerifyTamperedManifestSeqRange`).
+  - **Orphan / truncation** — an on-disk `<base>.NNN` segment beyond the manifest's coverage
+    (e.g. a crash mid-rotate left a rotated-out segment unlisted) is **not** silently treated as
+    a clean shorter log; `Verify()` returns `valid:false` naming the uncovered segment
+    (`TestVerifyOrphanSegmentBeyondManifest`).
+- **Guarantee:** A single-character change to any past entry — in any segment — fails
+  verification (`TestEmitVerifyAndTamperDetection`, `TestVerifyTamperInEarlierSegment`).
+  `Verify()` reads from disk, so corruption applied after the `Chain` is loaded is detected
+  without reloading (`TestVerifyReadsFromDiskNotMemory`).
 
 ## B-004 — Resume an existing chain
 
