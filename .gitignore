@@ -2,4 +2,16 @@
 *.log
 *.sock
 /audit-trail
+
+# Per-task worktrees (created by scripts/start-task.sh under concurrent sessions)
+.claude/worktrees/
+
+# Per-session lock files (used by session-lock.py to detect concurrent sessions)
 .claude/sessions/
+
+# Periodic-checkpoint marker (touched by periodic-checkpoint.py / pre-compact.py)
+.claude/.last-checkpoint
+
+# Python bytecode — emitted by .claude/scripts/ hooks
+__pycache__/
+*.pyc
