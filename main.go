@@ -9,10 +9,11 @@
 //
 // Usage:
 //
-//	audit-trail serve  --socket /run/audit.sock --logfile audit.log
-//	audit-trail emit   --logfile audit.log --actor vault --action resolve --target vault://x
-//	audit-trail verify --logfile audit.log
+//	audit-trail serve      --socket /run/audit.sock --logfile audit.log
+//	audit-trail emit       --logfile audit.log --actor vault --action resolve --target vault://x
+//	audit-trail verify     --logfile audit.log
 //	audit-trail checkpoint create --logfile audit.log --log-id prod --signing-key key.pem
+//	audit-trail rotate     --logfile audit.log --rotate-after N --log-id prod --signing-key key.pem
 package main
 
 import (
@@ -40,13 +41,15 @@ func main() {
 		cmdVerify(os.Args[2:])
 	case "checkpoint":
 		cmdCheckpoint(os.Args[2:])
+	case "rotate":
+		cmdRotate(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: audit-trail <serve|emit|verify|checkpoint> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: audit-trail <serve|emit|verify|checkpoint|rotate> [flags]")
 	os.Exit(2)
 }
 
@@ -54,11 +57,12 @@ func cmdServe(args []string) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	socket := fs.String("socket", "", "unix socket path (required)")
 	logfile := fs.String("logfile", "audit.log", "JSONL log path")
-	checkpointLogID := fs.String("checkpoint-log-id", "", "checkpoint log identifier")
-	checkpointSigningKey := fs.String("checkpoint-signing-key", "", "checkpoint signing key PEM path")
+	checkpointLogID := fs.String("checkpoint-log-id", "", "checkpoint log identifier (also used for rotation)")
+	checkpointSigningKey := fs.String("checkpoint-signing-key", "", "checkpoint signing key PEM path (also used for rotation)")
 	checkpointPublicKey := fs.String("checkpoint-public-key", "", "checkpoint verification public key PEM path")
 	rekorURL := fs.String("rekor-url", "", "Rekor transparency log server URL")
 	rekorPublicKey := fs.String("rekor-public-key", "", "Rekor server public key PEM path")
+	rotateAfter := fs.Int64("rotate-after", 0, "rotate the active segment after this many records (0 = disabled); requires --checkpoint-log-id and --checkpoint-signing-key")
 	fs.Parse(args)
 	if *socket == "" {
 		fmt.Fprintln(os.Stderr, "serve: --socket is required")
@@ -73,6 +77,7 @@ func cmdServe(args []string) {
 		PublicKeyPath:      *checkpointPublicKey,
 		RekorURL:           *rekorURL,
 		RekorPublicKeyPath: *rekorPublicKey,
+		RotateAfter:        *rotateAfter,
 	}))
 }
 
@@ -215,6 +220,40 @@ func check(err error) {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func cmdRotate(args []string) {
+	fs := flag.NewFlagSet("rotate", flag.ExitOnError)
+	logfile := fs.String("logfile", "audit.log", "JSONL log path")
+	rotateAfter := fs.Int64("rotate-after", 0, "rotate when the active segment holds at least this many records (required, > 0)")
+	logID := fs.String("log-id", "", "stable log identifier for the boundary checkpoint (required)")
+	signingKey := fs.String("signing-key", "", "PEM Ed25519 private key path for the boundary checkpoint (required)")
+	fs.Parse(args)
+
+	if *rotateAfter <= 0 {
+		fmt.Fprintln(os.Stderr, "rotate: --rotate-after must be > 0")
+		os.Exit(2)
+	}
+	if *logID == "" {
+		fmt.Fprintln(os.Stderr, "rotate: --log-id is required")
+		os.Exit(2)
+	}
+	if *signingKey == "" {
+		fmt.Fprintln(os.Stderr, "rotate: --signing-key is required")
+		os.Exit(2)
+	}
+
+	privateKey, err := LoadCheckpointSigningKey(*signingKey)
+	check(err)
+	chain, err := NewChain(*logfile)
+	check(err)
+
+	res, err := chain.Rotate(*rotateAfter, *logID, time.Now().Unix(), privateKey)
+	if err != nil && err != errBelowRotationThreshold {
+		check(err)
+	}
+	// errBelowRotationThreshold is a non-error outcome: print {rotated:false} and exit 0.
+	printJSON(res)
 }
 
 func cmdCheckpointAnchor(args []string) {

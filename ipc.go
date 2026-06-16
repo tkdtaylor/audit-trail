@@ -22,6 +22,9 @@ type CheckpointServerConfig struct {
 	PublicKeyPath      string
 	RekorURL           string
 	RekorPublicKeyPath string
+	// RotateAfter is the event-count rotation threshold for the "rotate" IPC op.
+	// Zero means rotation is not configured; the op returns rotation_not_configured.
+	RotateAfter int64
 }
 
 // serve runs the JSON-over-Unix-socket IPC form of the contract (interface-contracts §1):
@@ -116,6 +119,13 @@ func handleConn(conn net.Conn, chain *Chain, checkpointConfig CheckpointServerCo
 			return
 		}
 		writeJSON(conn, result)
+	case "rotate":
+		rotResult, err := rotateForIPC(chain, checkpointConfig)
+		if err != nil {
+			writeJSON(conn, errShape(rotateIPCErrorCode(err), err.Error()))
+			return
+		}
+		writeJSON(conn, rotResult)
 	default:
 		writeJSON(conn, errShape("unknown_op", "unsupported op"))
 	}
@@ -180,6 +190,40 @@ func checkpointIPCErrorCode(err error) string {
 	}
 	if errors.Is(err, errInvalidCheckpointLog) {
 		return "invalid_log"
+	}
+	return "internal"
+}
+
+// errRotationNotConfigured is returned by rotateForIPC when the daemon was started without
+// rotation configuration (--rotate-after / --checkpoint-signing-key / --checkpoint-log-id).
+var errRotationNotConfigured = errors.New("rotation not configured")
+
+// rotateForIPC runs Chain.Rotate using the daemon's startup-time rotation configuration.
+// Below-threshold is a success result (RotateResult{Rotated:false}), not an error, so the
+// caller writes the result directly. A missing configuration returns errRotationNotConfigured.
+func rotateForIPC(chain *Chain, config CheckpointServerConfig) (RotateResult, error) {
+	if config.RotateAfter <= 0 || config.SigningKeyPath == "" || config.LogID == "" {
+		return RotateResult{}, errRotationNotConfigured
+	}
+	privateKey, err := LoadCheckpointSigningKey(config.SigningKeyPath)
+	if err != nil {
+		return RotateResult{}, fmt.Errorf("rotate: load signing key: %w", err)
+	}
+	res, err := chain.Rotate(config.RotateAfter, config.LogID, time.Now().Unix(), privateKey)
+	if err != nil && err != errBelowRotationThreshold {
+		return RotateResult{}, fmt.Errorf("rotate: %w", err)
+	}
+	// errBelowRotationThreshold is a non-error result: return the RotateResult{Rotated:false}.
+	return res, nil
+}
+
+// rotateIPCErrorCode maps rotateForIPC errors to IPC error codes.
+func rotateIPCErrorCode(err error) string {
+	if errors.Is(err, errRotationNotConfigured) {
+		return "rotation_not_configured"
+	}
+	if errors.Is(err, errInvalidCheckpointKey) {
+		return "bad_request"
 	}
 	return "internal"
 }

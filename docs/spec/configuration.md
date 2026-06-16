@@ -1,6 +1,6 @@
 # Configuration
 
-**Project:** audit-trail · **Last updated:** 2026-06-03
+**Project:** audit-trail · **Last updated:** 2026-06-16
 
 audit-trail has **no config file and reads no environment variables**. All runtime behavior is
 controlled by CLI flags ([main.go](../../main.go)).
@@ -9,24 +9,32 @@ controlled by CLI flags ([main.go](../../main.go)).
 
 | Flag | Subcommands | Default | Meaning |
 |------|-------------|---------|---------|
-| `--logfile` | serve, emit, verify | `audit.log` | Path to the JSONL chain. Created `0600` if absent. |
+| `--logfile` | serve, emit, verify, rotate | `audit.log` | Path to the JSONL chain. Created `0600` if absent. |
 | `--socket` | serve | *(required)* | Unix socket path. Stale socket is removed, then `chmod 0600`. |
-| `--checkpoint-log-id` | serve | `""` | Stable log identifier used by IPC `checkpoint_create`; required with `--checkpoint-signing-key` for that op. |
-| `--checkpoint-signing-key` | serve | `""` | PEM Ed25519 private key path used by IPC `checkpoint_create`; clients do not send key paths per request. |
+| `--checkpoint-log-id` | serve | `""` | Stable log identifier used by IPC `checkpoint_create` and `rotate`; required with `--checkpoint-signing-key` for those ops. |
+| `--checkpoint-signing-key` | serve | `""` | PEM Ed25519 private key path used by IPC `checkpoint_create` and `rotate`; clients do not send key paths per request. |
 | `--checkpoint-public-key` | serve | `""` | PEM Ed25519 public key path used by IPC `checkpoint_verify`; clients do not send key paths per request. |
+| `--rotate-after` | serve, rotate | `0` (disabled) | Event-count rotation threshold. For `serve`: enables the IPC `{"op":"rotate"}` operation when > 0 (also requires `--checkpoint-log-id` and `--checkpoint-signing-key`). For `rotate` CLI: required, must be > 0. When the active segment holds at least this many records, `Rotate()` archives it; below threshold it no-ops (`{"rotated":false}`). |
 | `--rekor-url` | serve, checkpoint anchor, checkpoint verify-anchor | `""` | Rekor transparency log server URL. Triggers online verification for `checkpoint verify-anchor`. |
 | `--rekor-public-key` | serve, checkpoint verify-anchor | `""` | PEM public key path for the Rekor log server. |
 | `--actor` | emit | `""` | Event `actor`. |
 | `--action` | emit | `""` | Event `action`. |
 | `--target` | emit | `""` | Event `target`. |
 | `--decision` | emit | `""` | Event `decision`; omitted from the event when empty. |
-| `--log-id` | checkpoint create | *(required)* | Stable log identifier included in the signed checkpoint payload. |
-| `--signing-key` | checkpoint create | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
+| `--log-id` | checkpoint create, rotate | *(required)* | Stable log identifier included in the signed checkpoint payload. |
+| `--signing-key` | checkpoint create, rotate | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
 | `--out` | checkpoint create, checkpoint anchor | `""` | Optional checkpoint/receipt JSON output path; stdout is used when omitted. |
 | `--checkpoint` | checkpoint verify, checkpoint anchor, checkpoint verify-anchor | *(required)* | Signed checkpoint JSON path to verify or anchor. |
 | `--public-key` | checkpoint verify, checkpoint anchor, checkpoint verify-anchor | *(required)* | PEM-wrapped SubjectPublicKeyInfo Ed25519 public key of the operator. Optional for online `checkpoint verify-anchor`. |
 | `--logfile` | checkpoint verify | `""` | Optional JSONL log path to verify and compare against the checkpoint head. |
 | `--receipt` | checkpoint verify-anchor | *(required)* | Rekor receipt JSON path to verify. |
+
+### Rotation threshold default
+
+`--rotate-after` defaults to `0` (disabled). There is no automatic rotation: the operator
+must explicitly pass `--rotate-after N` to enable the feature (either in `serve` for IPC use,
+or on the `rotate` CLI command for one-shot use). A value of `0` in `serve` means the IPC
+`{"op":"rotate"}` op returns `rotation_not_configured`.
 
 ## Checkpoint key files
 

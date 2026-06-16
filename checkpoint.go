@@ -28,12 +28,19 @@ type CheckpointPayload struct {
 	IssuedAt      int64  `json:"issued_at"`
 }
 
-// BuildCheckpointPayload creates a payload from the verified logfile, not in-memory state.
+// BuildCheckpointPayload creates a payload from the verified on-disk chain head, not in-memory
+// state. It uses verifyAllSegments — the SAME walker as Chain.Verify and
+// VerifySignedCheckpointForLog — so "checkpointable ⟺ verifiable" by construction: any chain
+// state Verify() would reject (orphan/truncation, manifest-field tamper, broken seam) fails
+// closed here too (SEC-002), and the head it commits to is exactly the head a later
+// verify-against-log will recompute (SEC-001). For a multi-segment log this is the cumulative
+// global head (ADR-005 §4); for a never-rotated log it is byte-identical to the single-segment
+// case.
 func (c *Chain) BuildCheckpointPayload(logID string, issuedAt int64) (CheckpointPayload, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	state, res := verifyChainState(c.path)
+	state, res := verifyAllSegments(c.path)
 	if !res.Valid {
 		return CheckpointPayload{}, fmt.Errorf("%w: %s", errInvalidCheckpointLog, res.Message)
 	}
