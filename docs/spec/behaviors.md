@@ -227,3 +227,33 @@ Runtime checkpoint IPC operations are `checkpoint_create` and `checkpoint_verify
 - **IPC verify trigger:** `{"op":"checkpoint_verify","checkpoint":{…},"receipt":{…},"online":bool}`. Requires `--checkpoint-public-key` and `--rekor-public-key` in daemon configuration.
 - **Rejection of client-submitted config:** IPC requests containing config-override fields (`rekor_url`, `public_key`, `signing_key`, etc.) are explicitly rejected with `bad_request` to prevent SSRF and key-injection.
 
+## B-014 — Rotate the active segment through runtime surfaces
+
+- **CLI trigger:** `audit-trail rotate --logfile <path> --rotate-after <N> --log-id <id> --signing-key <private-pem>`.
+- **IPC trigger:** `{"op":"rotate"}` sent to a daemon started with `--rotate-after <N>`,
+  `--checkpoint-log-id <id>`, and `--checkpoint-signing-key <private-pem>`.
+- **At-or-above threshold response:** Closes the active segment, archives it as `<base>.NNN`,
+  writes a signed boundary checkpoint to `<base>.NNN.checkpoint`, updates `<base>.manifest`
+  atomically, opens a fresh active segment at `<base>`, and returns:
+  `{"rotated":true,"segment":"<base>.NNN","first_seq":N,"last_seq":N,"checkpoint":"<base>.NNN.checkpoint"}`.
+  The next `Emit` carries `prev_hash` equal to the rotated-out segment's last hash — no
+  separate bridge record; the chain link is the bridge.
+- **Below-threshold response:** Returns `{"rotated":false}` (CLI exit 0; IPC success shape, not
+  an error). No files are touched.
+- **IPC not-configured response:** If the daemon is started without `--rotate-after` (or
+  `--checkpoint-log-id` / `--checkpoint-signing-key` are missing), the IPC op returns
+  `{"error":{"code":"rotation_not_configured","message":"rotation not configured","retryable":false}}`.
+  The daemon does not crash or partially rotate.
+- **Emit path:** Rotation is always an explicit, separate operation — it never happens
+  implicitly inside `Emit`. The emit hot path is untouched.
+- **Concurrency:** `Rotate()` holds the chain mutex (`c.mu`) across the entire operation; `Emit()`
+  and checkpoint ops also take `c.mu`. All writes are serialized. A concurrent emit waits for
+  the rotation to finish (or vice versa) and then proceeds normally — neither stalls indefinitely
+  because no network calls are made inside `Rotate()`.
+- **Key-injection protection:** The daemon reads rotation configuration from startup flags only.
+  The client-key-path rejection list covers `rotate` requests: any request containing
+  `signing_key`, `key_path`, etc. is rejected with `bad_request`.
+- **v1 preservation:** All existing `emit`/`verify`/`ping`/`checkpoint_*` CLI and IPC shapes
+  are unchanged. `verify` now walks all segments (manifest + active) and returns the same
+  `{valid, tamper_detected_at, message}` shape.
+

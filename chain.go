@@ -350,6 +350,43 @@ func verifyChainState(path string) (verifiedChainState, VerifyResult) {
 	return verifyChainStateFrom(path, Genesis, 0)
 }
 
+// verifyFullChain performs a cross-segment walk identical to verifyAcrossSegments and returns
+// the cumulative verifiedChainState of the final (active) segment. It is used by
+// BuildCheckpointPayload so that the checkpoint head reflects the global chain state even when
+// the active segment does not start at Genesis (i.e. after one or more rotations).
+func verifyFullChain(logPath string) (verifiedChainState, VerifyResult) {
+	m, err := loadManifest(manifestPath(logPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Degenerate never-rotated log: identical to the single-file walk.
+			return verifyChainStateFrom(logPath, Genesis, 0)
+		}
+		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
+	}
+
+	dir := filepath.Dir(logPath)
+	prev := Genesis
+	var offset int64
+
+	for _, seg := range m.Segments {
+		if seg.Segment == "" || seg.Segment == "." || seg.Segment == ".." ||
+			seg.Segment != filepath.Base(seg.Segment) || filepath.IsAbs(seg.Segment) {
+			return verifiedChainState{}, VerifyResult{Valid: false,
+				Message: "invalid segment filename in manifest: " + seg.Segment}
+		}
+		segFile := filepath.Join(dir, seg.Segment)
+		state, res := verifyChainStateFrom(segFile, prev, offset)
+		if !res.Valid {
+			return verifiedChainState{}, res
+		}
+		prev = state.rootHash
+		offset = state.treeSize
+	}
+
+	// Walk the active segment carrying the manifest head.
+	return verifyChainStateFrom(logPath, prev, offset)
+}
+
 // verifyChainStateFrom is the parameterized segment walker (ADR-005 §3). It walks the records
 // in path expecting the first record's prev_hash to equal startPrev (Genesis for segment 0,
 // the previous segment's end hash otherwise) and treats startOffset as the number of records
