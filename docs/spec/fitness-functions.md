@@ -42,6 +42,8 @@ make fitness-<rule>   # run one rule by name
 | FF-007 | Checkpoint signature tamper rejection holds | security | Altered fixture payload content and altered fixture signature bytes both fail verification | pass | `make fitness-checkpoint-tamper-detection` | block | Signed checkpoints are only useful if changed signed content or signatures fail closed. This promotes the ADR-003 tamper cases to named gates before anchoring/rotation work builds on them. | wired |
 | FF-008 | Rekor receipt verification succeeds offline using committed fixtures | security | The committed fixture Rekor receipt verifies offline using the fixture Rekor public key and operator public key | pass | `make fitness-anchor-stability` | block | Ensures offline witness anchoring validation remains stable and correct across code changes, preserving our ability to verify older logs. | wired |
 | FF-009 | Altered Rekor receipts, checkpoints, or public keys fail verification | security | Tampered receipt, checkpoint, or public key bytes fail offline verification | pass | `make fitness-anchor-tamper-detection` | block | Validates that witness verification fails closed for any modifications to the receipt, checkpoint, or keys, preventing bypasses. | wired |
+| FF-010 | Rotation seam tamper detection holds | security | Each of: one-byte edit in a rotated-out segment, broken seam prev_hash, dropped segment file, and swapped manifest entries causes `Verify()` to return `valid:false` | pass | `make fitness-rotation-tamper-detection` | block | The rotation seam is the highest-risk integrity boundary: a reordered, dropped, or byte-edited segment must never slip past `Verify()`. Committed multi-segment fixtures under `testdata/segments/` are the long-term regression anchor. | wired |
+| FF-011 | Cross-segment chain stability | security | `Verify()` over the committed multi-segment fixtures returns `{valid:true, tamper_detected_at:null, "chain intact"}` and every cross-segment seam's `prev_hash` link holds | pass | `make fitness-rotation-stability` | block | Guards that code changes to the segment walker, hash computation, or manifest parsing never silently break an intact multi-segment chain. The fixtures are stable committed bytes generated once from a known-good run. | wired |
 
 Categories: `structural`, `hygiene`, `performance`, `complexity`, `security`, `coverage`.
 Severity: `block` (fails the runner) / `warn` (surfaces only).
@@ -59,6 +61,7 @@ Severity: `block` (fails the runner) / `warn` (surfaces only).
 - FF-004 ← ADR-001 D2, ADR-002, [behaviors.md](behaviors.md) B-001 / B-007
 - FF-006, FF-007 ← ADR-003, [behaviors.md](behaviors.md) B-009 / B-010
 - FF-008, FF-009 ← ADR-004, [behaviors.md](behaviors.md) B-012
+- FF-010, FF-011 ← ADR-005, [behaviors.md](behaviors.md) B-003 (tamper detection at seam) / B-007 (chain continuity)
 
 ## Notes
 
@@ -71,3 +74,8 @@ Severity: `block` (fails the runner) / `warn` (surfaces only).
   tests.
 - FF-008 and FF-009 use safe test fixtures under `testdata/checkpoints/`: a Rekor public key,
   a signed checkpoint, and a valid Rekor receipt containing a SET signature.
+- FF-010 and FF-011 use deterministic committed fixtures under `testdata/segments/`: two
+  rotated-out segments (`audit.log.001`, `audit.log.002`) with their signed checkpoints, the
+  `audit.log.manifest`, and an active segment (`audit.log`) with additional records. All bytes
+  were generated once by `testdata/segments/generate/main.go` using the same Ed25519 test key
+  and fixed timestamps; they must not be regenerated during normal `go test` / `make` runs.

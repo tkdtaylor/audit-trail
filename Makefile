@@ -1,4 +1,4 @@
-.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt
+.PHONY: build test check fmt clean fitness fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt fitness-rotation-stability fitness-rotation-tamper-detection
 
 build:
 	go build -o bin/audit-trail ./...
@@ -13,7 +13,7 @@ check:
 fmt:
 	go fmt ./...
 
-fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt
+fitness: fitness-no-deps fitness-tamper-detection fitness-canonical-stability fitness-no-floats fitness-checkpoint-stability fitness-checkpoint-tamper-detection fitness-anchor-stability fitness-anchor-tamper-detection fitness-gofmt fitness-rotation-stability fitness-rotation-tamper-detection
 	@echo "fitness: all wired checks passed"
 
 fitness-no-deps:
@@ -44,6 +44,11 @@ fitness-anchor-stability:
 fitness-anchor-tamper-detection:
 	go test ./... -run '^TestRekorTamperFixtureDetection$$'
 
+fitness-rotation-stability:
+	go test ./... -run '^TestRotationStabilityFixture$$'
+
+fitness-rotation-tamper-detection:
+	go test ./... -run '^TestRotationTamperFixtureDetection$$'
 
 fitness-gofmt:
 	@tmp="$$(mktemp)"; \

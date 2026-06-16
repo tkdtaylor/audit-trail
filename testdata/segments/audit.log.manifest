@@ -1,0 +1,22 @@
+{
+  "format": "audit-trail-manifest-v1",
+  "version": 1,
+  "segments": [
+    {
+      "segment": "audit.log.001",
+      "first_seq": 0,
+      "last_seq": 2,
+      "start_prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "end_hash": "d48bcfed3bf62235f565f665fc0d8df4d1588c050f63b4b46b4ba9d8a9f7ceeb",
+      "issued_at": 1750000100
+    },
+    {
+      "segment": "audit.log.002",
+      "first_seq": 3,
+      "last_seq": 5,
+      "start_prev_hash": "d48bcfed3bf62235f565f665fc0d8df4d1588c050f63b4b46b4ba9d8a9f7ceeb",
+      "end_hash": "4fd890104a81cadedd010d767c914cd97162357beea5884837a23ceff75ed761",
+      "issued_at": 1750000100
+    }
+  ]
+}

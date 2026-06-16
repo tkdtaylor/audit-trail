@@ -1,0 +1,18 @@
+{
+  "payload": {
+    "contract": "audit-trail-v1",
+    "format": "audit-trail-checkpoint-v1",
+    "hash_algorithm": "sha256-linear-chain-v1",
+    "issued_at": 1750000100,
+    "last_seq": 2,
+    "log_id": "fixture-segment-log",
+    "root_hash": "d48bcfed3bf62235f565f665fc0d8df4d1588c050f63b4b46b4ba9d8a9f7ceeb",
+    "tree_size": 3,
+    "version": 1
+  },
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "ed25519-sha256:34750f98bd59fcfc946da45aaabe933be154a4b5094e1c4abf42866505f3c97e",
+    "sig": "fuPbBPX-6QGWqV08h6o0_56NmzUn8ONMAEGx3F4qTq4J3nDOX_ViBBFC_avmKBEZCv0L4pjE79MuLZviFFyqBA"
+  }
+}
