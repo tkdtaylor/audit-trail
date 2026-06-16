@@ -226,13 +226,15 @@ func TestIPCRotateSucceeds(t *testing.T) {
 		t.Fatalf("rotated segment missing on disk: %v", err)
 	}
 
-	// Signed checkpoint sidecar exists.
+	// Signed checkpoint sidecar exists. A successful rotation MUST always emit a checkpoint, so
+	// assert the field is present and the file is on disk unconditionally.
 	cpField, _ := resp["checkpoint"].(string)
-	if cpField != "" {
-		cpOnDisk := filepath.Join(dir, cpField)
-		if _, err := os.Stat(cpOnDisk); err != nil {
-			t.Fatalf("checkpoint file missing on disk: %v", err)
-		}
+	if cpField == "" {
+		t.Fatalf("expected non-empty checkpoint in response, got %+v", resp)
+	}
+	cpOnDisk := filepath.Join(dir, cpField)
+	if _, err := os.Stat(cpOnDisk); err != nil {
+		t.Fatalf("checkpoint file missing on disk: %v", err)
 	}
 }
 
@@ -279,6 +281,19 @@ func TestIPCRotateNotConfigured(t *testing.T) {
 	// No rotation config at all (empty CheckpointServerConfig, RotateAfter == 0).
 	resp := ipcRoundTrip(t, c, `{"op":"rotate"}`)
 	assertIPCError(t, resp, "rotation_not_configured", "rotation not configured")
+
+	// TC-017-04: the shared error shape must carry an explicit retryable:false (a missing
+	// configuration is not transient — retrying without reconfiguring will fail identically).
+	errObj, ok := resp["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected error object, got %+v", resp)
+	}
+	if _, present := errObj["retryable"]; !present {
+		t.Fatalf("error shape missing retryable field: %+v", errObj)
+	}
+	if errObj["retryable"] != false {
+		t.Fatalf("expected retryable:false, got %+v", errObj["retryable"])
+	}
 }
 
 // TC-017-04: missing signing key returns rotation_not_configured.

@@ -186,7 +186,11 @@ Runtime checkpoint IPC operations are `checkpoint_create` and `checkpoint_verify
 - **CLI verify response:** Prints `{valid, signature_valid, log_match, message}`. Signature-only
   verification returns `log_match:null`. With `--logfile`, audit-trail first verifies the
   signature, then verifies the logfile from disk and compares `tree_size`, `last_seq`, and
-  `root_hash` to the signed payload. Exit code is `0` only when the requested verification is
+  `root_hash` to the signed payload. The logfile is walked with the **same single cross-segment
+  walker** that produced the checkpoint, so a checkpoint created over a rotated (multi-segment)
+  log compares against that log's cumulative global head — a freshly created checkpoint always
+  reports `log_match:true` against its own log, whether or not rotation has occurred
+  ("checkpointable ⟺ verifiable"). Exit code is `0` only when the requested verification is
   valid; invalid signatures, malformed checkpoints, tampered logs, and log mismatches exit
   non-zero.
 - **IPC create trigger:** `{"op":"checkpoint_create"}`. The daemon uses

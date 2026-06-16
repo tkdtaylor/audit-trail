@@ -201,13 +201,21 @@ func VerifySignedCheckpoint(checkpoint SignedCheckpoint, publicKey ed25519.Publi
 }
 
 // VerifySignedCheckpointForLog verifies the signature and compares it to a verified logfile.
+//
+// It walks the log with verifyAllSegments — the SAME cross-segment walker used to CREATE the
+// checkpoint (BuildCheckpointPayload) and by Chain.Verify — not a single-segment walk. For a
+// rotated log the checkpoint commits to the cumulative global head (tree_size/last_seq/root_hash
+// over all segments); comparing it against a single-segment walk of only the active segment would
+// spuriously report log_match:false ("prev_hash link broken") for a freshly created, perfectly
+// valid checkpoint. Using the same walker on both sides keeps create→verify-against-log correct
+// once rotation is in play (SEC-001).
 func VerifySignedCheckpointForLog(checkpoint SignedCheckpoint, publicKey ed25519.PublicKey, logPath string) CheckpointVerificationResult {
 	result := VerifySignedCheckpoint(checkpoint, publicKey)
 	if !result.Valid {
 		return result
 	}
 
-	state, verifyResult := verifyChainState(logPath)
+	state, verifyResult := verifyAllSegments(logPath)
 	if !verifyResult.Valid {
 		match := false
 		return CheckpointVerificationResult{

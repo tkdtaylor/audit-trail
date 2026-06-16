@@ -220,21 +220,33 @@ type verifiedChainState struct {
 // segment's walked result against the manifest's recorded values. It always reads from disk and
 // never trusts in-memory c.prevHash / c.seq (ADR-005 §3).
 func (c *Chain) Verify() VerifyResult {
-	return verifyAcrossSegments(c.path)
+	_, res := verifyAllSegments(c.path)
+	return res
 }
 
-// verifyAcrossSegments is the cross-segment walker (REQ-016-01..07). It loads the manifest for
-// the chain whose active segment is at logPath; with no manifest (or an empty one) it falls back
-// to the exact single-file path so the degenerate case is unchanged.
-func verifyAcrossSegments(logPath string) VerifyResult {
+// verifyAllSegments is THE single cross-segment integrity walker (REQ-016-01..07). It is the one
+// integrity-critical function that decides whether a (possibly rotated) chain is intact, and it
+// returns BOTH the cumulative verifiedChainState (global tree_size/last_seq/root_hash as of the
+// active segment's last record) AND the VerifyResult. Every caller that needs to know "is this
+// chain valid, and what is its head" — Chain.Verify, BuildCheckpointPayload, and
+// VerifySignedCheckpointForLog — routes through here so there is exactly one definition of a
+// verifiable chain head ("checkpointable ⟺ verifiable", SEC-001/SEC-002).
+//
+// It loads the manifest for the chain whose active segment is at logPath; with no manifest (or an
+// empty one) it falls back to the exact single-file verifyChainState path so the degenerate
+// never-rotated case is byte-for-byte unchanged. For a rotated log it walks every rotated-out
+// segment in manifest order plus the active segment, threading the carried ending prev_hash and
+// seq offset, applying the seam check at every boundary, cross-checking each segment against the
+// manifest's recorded values (SEC-002 fields), running the orphan/truncation defense, and
+// validating manifest filenames against path traversal. It always reads from disk.
+func verifyAllSegments(logPath string) (verifiedChainState, VerifyResult) {
 	m, err := loadManifest(manifestPath(logPath))
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Degenerate, never-rotated log: identical to the original single-file walk.
-			_, res := verifyChainState(logPath)
-			return res
+			return verifyChainState(logPath)
 		}
-		return VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
+		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
 	}
 	if len(m.Segments) == 0 {
 		// A manifest FILE exists but lists zero segments. This is NOT the degenerate
@@ -246,15 +258,14 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		// hardening — SEC-L01).
 		highest, err := highestSegmentOnDisk(logPath)
 		if err != nil {
-			return VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
+			return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
 		}
 		if highest > 0 {
 			orphan := segmentPath(logPath, 1)
-			return VerifyResult{Valid: false,
+			return verifiedChainState{}, VerifyResult{Valid: false,
 				Message: "on-disk segment beyond manifest coverage: " + filepath.Base(orphan)}
 		}
-		_, res := verifyChainState(logPath)
-		return res
+		return verifyChainState(logPath)
 	}
 
 	dir := filepath.Dir(logPath)
@@ -270,7 +281,7 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		// separator or "..".
 		if seg.Segment == "" || seg.Segment == "." || seg.Segment == ".." ||
 			seg.Segment != filepath.Base(seg.Segment) || filepath.IsAbs(seg.Segment) {
-			return VerifyResult{Valid: false,
+			return verifiedChainState{}, VerifyResult{Valid: false,
 				Message: "invalid segment filename in manifest: " + seg.Segment}
 		}
 		segFile := filepath.Join(dir, seg.Segment)
@@ -279,10 +290,10 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		if _, statErr := os.Stat(segFile); statErr != nil {
 			if os.IsNotExist(statErr) {
 				at := offset
-				return VerifyResult{Valid: false, TamperDetectedAt: &at,
+				return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 					Message: "segment missing from disk: " + seg.Segment}
 			}
-			return VerifyResult{Valid: false, Message: "cannot stat segment " + seg.Segment + ": " + statErr.Error()}
+			return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot stat segment " + seg.Segment + ": " + statErr.Error()}
 		}
 
 		// Walk the segment from the ACTUAL carried head + offset (derived from on-disk hashes,
@@ -291,7 +302,7 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		// reordered or seam-tampered segment fails to link to the prior segment's real head.
 		state, res := verifyChainStateFrom(segFile, prev, offset)
 		if !res.Valid {
-			return res
+			return verifiedChainState{}, res
 		}
 
 		// Manifest-vs-content cross-check (SEC-002 / ADR-005 Integrity risks): the manifest's
@@ -300,22 +311,22 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		// nor mask a tampered one.
 		if seg.StartPrevHash != prev {
 			at := offset
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "manifest start_prev_hash mismatch for segment " + seg.Segment}
 		}
 		if seg.FirstSeq != offset {
 			at := offset
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "manifest first_seq mismatch for segment " + seg.Segment}
 		}
 		if seg.LastSeq != state.lastSeq {
 			at := state.lastSeq
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "manifest last_seq mismatch for segment " + seg.Segment}
 		}
 		if seg.EndHash != state.rootHash {
 			at := state.lastSeq
-			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+			return verifiedChainState{}, VerifyResult{Valid: false, TamperDetectedAt: &at,
 				Message: "manifest end_hash mismatch for segment " + seg.Segment}
 		}
 
@@ -329,62 +340,25 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 	// there are no rotated-out files at all, so this never trips the degenerate no-segments case.
 	highest, err := highestSegmentOnDisk(logPath)
 	if err != nil {
-		return VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
+		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
 	}
 	if highest > int64(len(m.Segments)) {
 		orphan := segmentPath(logPath, int64(len(m.Segments))+1)
-		return VerifyResult{Valid: false,
+		return verifiedChainState{}, VerifyResult{Valid: false,
 			Message: "on-disk segment beyond manifest coverage: " + filepath.Base(orphan)}
 	}
 
 	// Finally walk the active segment at logPath, carrying the last rotated-out segment's head
 	// and offset. The seam between the last rotated-out segment and the active segment is checked
-	// here too (the active segment's first record must link to the prior head).
-	_, res := verifyChainStateFrom(logPath, prev, offset)
-	return res
+	// here too (the active segment's first record must link to the prior head). The returned state
+	// is the cumulative global head over ALL segments, which is what a checkpoint commits to.
+	return verifyChainStateFrom(logPath, prev, offset)
 }
 
 // verifyChainState walks a single segment from Genesis with a zero offset. This is the
 // degenerate, never-rotated case and is byte-for-byte identical to the original behavior.
 func verifyChainState(path string) (verifiedChainState, VerifyResult) {
 	return verifyChainStateFrom(path, Genesis, 0)
-}
-
-// verifyFullChain performs a cross-segment walk identical to verifyAcrossSegments and returns
-// the cumulative verifiedChainState of the final (active) segment. It is used by
-// BuildCheckpointPayload so that the checkpoint head reflects the global chain state even when
-// the active segment does not start at Genesis (i.e. after one or more rotations).
-func verifyFullChain(logPath string) (verifiedChainState, VerifyResult) {
-	m, err := loadManifest(manifestPath(logPath))
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Degenerate never-rotated log: identical to the single-file walk.
-			return verifyChainStateFrom(logPath, Genesis, 0)
-		}
-		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
-	}
-
-	dir := filepath.Dir(logPath)
-	prev := Genesis
-	var offset int64
-
-	for _, seg := range m.Segments {
-		if seg.Segment == "" || seg.Segment == "." || seg.Segment == ".." ||
-			seg.Segment != filepath.Base(seg.Segment) || filepath.IsAbs(seg.Segment) {
-			return verifiedChainState{}, VerifyResult{Valid: false,
-				Message: "invalid segment filename in manifest: " + seg.Segment}
-		}
-		segFile := filepath.Join(dir, seg.Segment)
-		state, res := verifyChainStateFrom(segFile, prev, offset)
-		if !res.Valid {
-			return verifiedChainState{}, res
-		}
-		prev = state.rootHash
-		offset = state.treeSize
-	}
-
-	// Walk the active segment carrying the manifest head.
-	return verifyChainStateFrom(logPath, prev, offset)
 }
 
 // verifyChainStateFrom is the parameterized segment walker (ADR-005 §3). It walks the records
