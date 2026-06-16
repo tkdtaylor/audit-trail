@@ -158,11 +158,24 @@ func run() error {
 	}
 	tmpName := tmp.Name()
 	defer func() { _ = os.Remove(tmpName) }()
-	if err := tmp.Chmod(0o600); err != nil { tmp.Close(); return fmt.Errorf("chmod tmp manifest: %w", err) }
-	if _, err := tmp.Write(mfBytes); err != nil { tmp.Close(); return fmt.Errorf("write tmp manifest: %w", err) }
-	if err := tmp.Sync(); err != nil { tmp.Close(); return fmt.Errorf("sync tmp manifest: %w", err) }
-	if err := tmp.Close(); err != nil { return fmt.Errorf("close tmp manifest: %w", err) }
-	if err := os.Rename(tmpName, mfPath); err != nil { return fmt.Errorf("rename manifest: %w", err) }
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("chmod tmp manifest: %w", err)
+	}
+	if _, err := tmp.Write(mfBytes); err != nil {
+		tmp.Close()
+		return fmt.Errorf("write tmp manifest: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("sync tmp manifest: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close tmp manifest: %w", err)
+	}
+	if err := os.Rename(tmpName, mfPath); err != nil {
+		return fmt.Errorf("rename manifest: %w", err)
+	}
 
 	// Emit 3 active records into new audit.log.
 	if err := os.WriteFile(base, nil, 0o600); err != nil {
