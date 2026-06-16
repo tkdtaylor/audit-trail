@@ -237,6 +237,22 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 		return VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
 	}
 	if len(m.Segments) == 0 {
+		// A manifest FILE exists but lists zero segments. This is NOT the degenerate
+		// never-rotated case (that path has no manifest at all and is handled above). An
+		// attacker who rewrites the manifest to {"segments":[]} while leaving <base>.NNN
+		// segments on disk would otherwise fall to the single-file walk and surface a generic
+		// "prev_hash link broken" message. Run the SEC-003 orphan scan first so an uncovered
+		// on-disk segment is named explicitly (fails closed either way; this is diagnostic
+		// hardening — SEC-L01).
+		highest, err := highestSegmentOnDisk(logPath)
+		if err != nil {
+			return VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
+		}
+		if highest > 0 {
+			orphan := segmentPath(logPath, 1)
+			return VerifyResult{Valid: false,
+				Message: "on-disk segment beyond manifest coverage: " + filepath.Base(orphan)}
+		}
 		_, res := verifyChainState(logPath)
 		return res
 	}
@@ -247,6 +263,16 @@ func verifyAcrossSegments(logPath string) VerifyResult {
 
 	// Walk each rotated-out segment in manifest order, threading the carried head + offset.
 	for _, seg := range m.Segments {
+		// The manifest is untrusted input: reject any segment field that is not a bare base
+		// filename before joining it to the log directory, so a manifest entry like
+		// "../something" or an absolute path cannot reach a file outside the log dir
+		// (SEC-I01). filepath.Base collapses any path; if it differs, the field carried a
+		// separator or "..".
+		if seg.Segment == "" || seg.Segment == "." || seg.Segment == ".." ||
+			seg.Segment != filepath.Base(seg.Segment) || filepath.IsAbs(seg.Segment) {
+			return VerifyResult{Valid: false,
+				Message: "invalid segment filename in manifest: " + seg.Segment}
+		}
 		segFile := filepath.Join(dir, seg.Segment)
 
 		// Dropped segment: listed in the manifest but missing from disk (REQ-016-04).

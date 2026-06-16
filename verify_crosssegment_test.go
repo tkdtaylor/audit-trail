@@ -219,6 +219,69 @@ func TestVerifyOrphanSegmentBeyondManifest(t *testing.T) {
 	}
 }
 
+// SEC-L01: a manifest FILE that is present but lists ZERO segments must NOT bypass the orphan
+// (SEC-003) scan. With <base>.001 still on disk, Verify() must fail closed naming the uncovered
+// segment rather than falling to the degenerate single-file walk and surfacing a generic
+// broken-link message.
+func TestVerifyEmptyManifestWithOrphanSegment(t *testing.T) {
+	c, _ := buildMultiSegmentChain(t, 1, 3, 2)
+
+	seg1 := segmentPath(c.path, 1)
+	if _, err := os.Stat(seg1); err != nil {
+		t.Fatalf("precondition: expected %s on disk: %v", filepath.Base(seg1), err)
+	}
+
+	// Rewrite the manifest to {"segments":[]} while leaving .001 on disk.
+	m := loadManifestForTest(t, c.path)
+	m.Segments = nil
+	writeManifestForTest(t, c.path, m)
+
+	r := c.Verify()
+	if r.Valid {
+		t.Fatal("expected empty-manifest-with-orphan to be detected, got valid")
+	}
+	if !strings.Contains(r.Message, "beyond manifest coverage") {
+		t.Fatalf("expected orphan-coverage message, got %q", r.Message)
+	}
+	if !strings.Contains(r.Message, filepath.Base(seg1)) {
+		t.Fatalf("expected message to name orphan segment %q, got %q", filepath.Base(seg1), r.Message)
+	}
+}
+
+// SEC-I01: a manifest entry whose `segment` field is not a bare base filename (path separator,
+// "..", or absolute path) is untrusted input and must be rejected before any file is opened.
+func TestVerifyRejectsManifestPathTraversal(t *testing.T) {
+	cases := []struct{ name, segValue string }{
+		{"parent-traversal", "../secret"},
+		{"nested-path", "sub/dir/audit.log.001"},
+		{"absolute", "/etc/passwd"},
+		{"dotdot-only", ".."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := buildMultiSegmentChain(t, 1, 3, 2)
+
+			// Plant a canary file outside the log dir; the bad filename must NOT cause it to
+			// be opened (it would not be opened anyway since we fail closed, but assert the
+			// invalid-filename branch fires before any join/open).
+			m := loadManifestForTest(t, c.path)
+			m.Segments[0].Segment = tc.segValue
+			writeManifestForTest(t, c.path, m)
+
+			r := c.Verify()
+			if r.Valid {
+				t.Fatalf("expected invalid segment filename %q to be rejected, got valid", tc.segValue)
+			}
+			if !strings.Contains(r.Message, "invalid segment filename in manifest") {
+				t.Fatalf("expected invalid-filename message, got %q", r.Message)
+			}
+			if !strings.Contains(r.Message, tc.segValue) {
+				t.Fatalf("expected message to name offending value %q, got %q", tc.segValue, r.Message)
+			}
+		})
+	}
+}
+
 // TC-016-07: Verify() reads from disk, not in-memory state. Corrupt a segment file after the
 // Chain is loaded; the in-memory chain still reports the pre-corruption head, but Verify()
 // (reading disk) must disagree and flag the tamper.
