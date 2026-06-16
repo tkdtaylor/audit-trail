@@ -25,6 +25,11 @@
 | 011 | Offline and online anchor verification | [011-anchor-verification-test-spec.md](011-anchor-verification-test-spec.md) | Spec complete; TC-011-01..03 passed | ✅ | L2: unit-test-only; no runtime surface. `make check` -> `ok github.com/tkdtaylor/audit-trail`; `make fitness` -> `fitness: all wired checks passed` |
 | 012 | Anchoring runtime surface | [012-anchoring-runtime-surface-test-spec.md](012-anchoring-runtime-surface-test-spec.md) | Spec complete; TC-012-01..05 passed | ✅ | L5: validation harness exercises CLI and IPC socket paths. `go test -v -run TestRekorRuntimeIntegration` -> `ok github.com/tkdtaylor/audit-trail 0.608s` |
 | 013 | Anchoring fitness and fixtures | [013-anchoring-fitness-fixtures-test-spec.md](013-anchoring-fitness-fixtures-test-spec.md) | Spec complete; TC-013-01..04 passed | ✅ | L5: fixture verification tests exercise committed `testdata/checkpoints/rekor-*` fixtures; `make fitness-anchor-stability` -> `ok github.com/tkdtaylor/audit-trail 0.004s`; `make fitness-anchor-tamper-detection` -> `ok github.com/tkdtaylor/audit-trail 0.003s`; umbrella `make fitness` includes both and ends `fitness: all wired checks passed`; `make check` -> `go build ./...` |
+| 014 | Design log rotation | [014-design-log-rotation-test-spec.md](014-design-log-rotation-test-spec.md) | Spec complete; TC-014-01..08 defined | ❌ Not started | — |
+| 015 | Segment and manifest core | [015-segment-and-manifest-core-test-spec.md](015-segment-and-manifest-core-test-spec.md) | Spec complete; TC-015-01..08 defined | ❌ Not started | — |
+| 016 | Cross-segment Verify() | [016-cross-segment-verify-test-spec.md](016-cross-segment-verify-test-spec.md) | Spec complete; TC-016-01..08 defined | ❌ Not started | — |
+| 017 | Rotation runtime surface | [017-rotation-runtime-surface-test-spec.md](017-rotation-runtime-surface-test-spec.md) | Spec complete; TC-017-01..06 defined | ❌ Not started | — |
+| 018 | Rotation fitness and fixtures | [018-rotation-fitness-and-fixtures-test-spec.md](018-rotation-fitness-and-fixtures-test-spec.md) | Spec complete; TC-018-01..04 defined | ❌ Not started | — |
 
 
 
