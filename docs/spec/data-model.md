@@ -113,7 +113,7 @@ A segment is a JSONL file of audit records, identical in record format to the si
 | Aspect | Value |
 |--------|-------|
 | Active segment | File at `Chain.path` (e.g. `audit.log`) — still taking writes. |
-| Rotated-out segment | Sibling `<base>.NNN`, zero-padded monotonic (`audit.log.001`, `audit.log.002`, …; `n = manifest length + 1`). |
+| Rotated-out segment | Sibling `<base>.NNN`, zero-padded monotonic (`audit.log.001`, `audit.log.002`, …). `n` is derived from the **highest `<base>.NNN` file present on disk + 1**, never from the (untrusted) manifest length — a forged/truncated/deleted manifest must not be able to drive `n` backwards and overwrite an existing segment (SEC-001). Rotation additionally refuses (non-destructive error) rather than `os.Rename` over an already-existing target segment. |
 | Per-segment checkpoint | `<base>.NNN.checkpoint`, mode `0600` — an ADR-003 signed checkpoint over the **cumulative** chain head at that boundary (`tree_size`/`last_seq`/`root_hash` are global, not a per-segment subtree). |
 | Record format | Unchanged (`{seq, ts, actor, action, target, decision, refs, context, prev_hash, hash}`). |
 

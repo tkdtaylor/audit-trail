@@ -201,6 +201,66 @@ func TestManifestWriteIsAtomic(t *testing.T) {
 	}
 }
 
+// TC-015-02 (failure path): a write that fails BEFORE the rename completes must leave no
+// partial/leftover temp file on disk — the `defer os.Remove(tmpName)` cleanup must fire. We
+// force the rename to fail (the temp file is successfully created and written first) and assert
+// the manifest directory is clean afterward.
+func TestManifestWriteFailureLeavesNoTempFile(t *testing.T) {
+	cases := []struct {
+		name string
+		// setup prepares dir and returns the manifest path to write to; writeManifestAtomic must
+		// fail AFTER creating the temp file but on or before the rename.
+		setup func(t *testing.T, dir string) (path string)
+	}{
+		{
+			name: "rename target is a non-empty directory",
+			setup: func(t *testing.T, dir string) string {
+				// Make the manifest "path" itself an existing non-empty directory so os.Rename of
+				// the temp file onto it fails (ENOTEMPTY/EISDIR) — but only after CreateTemp+write
+				// have already produced the temp file in dir.
+				path := filepath.Join(dir, "audit.log"+ManifestSuffix)
+				if err := os.Mkdir(path, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(path, "blocker"), []byte("x"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				return path
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := tc.setup(t, dir)
+
+			m := SegmentManifest{Format: ManifestFormat, Version: ManifestVersion, Segments: []Segment{
+				{Segment: "audit.log.001", FirstSeq: 0, LastSeq: 0, StartPrevHash: Genesis,
+					EndHash: lastHashRepeat(0), IssuedAt: segmentIssuedAt},
+			}}
+
+			err := writeManifestAtomic(path, m)
+			if err == nil {
+				t.Fatal("expected writeManifestAtomic to fail before/at rename")
+			}
+
+			// The temp file is created with the ".manifest-*.tmp" prefix in dir; the deferred
+			// cleanup must have removed it. Assert no such leftover remains.
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, e := range entries {
+				name := e.Name()
+				if strings.HasPrefix(name, ".manifest-") && strings.HasSuffix(name, ".tmp") {
+					t.Fatalf("leftover temp file after failed write: %s", name)
+				}
+			}
+		})
+	}
+}
+
 func lastHashRepeat(n int) string {
 	b := make([]byte, 64)
 	for i := range b {
@@ -518,6 +578,141 @@ func TestRotateSecondBoundaryReanchorsCumulativeHead(t *testing.T) {
 		t.Fatalf("seam in manifest broken: seg2 start_prev_hash %v != seg1 end_hash %v",
 			m.Segments[1].StartPrevHash, m.Segments[0].EndHash)
 	}
+}
+
+// SEC-001: Rotate() must never overwrite an existing <base>.NNN segment, even when the manifest
+// (an untrusted index) under-counts or is missing. A deleted/forged/truncated manifest must not
+// drive Rotate to a low segment number and clobber a real segment file via os.Rename.
+func TestRotateDoesNotOverwriteExistingSegment(t *testing.T) {
+	t.Run("disk-derived number skips an existing segment", func(t *testing.T) {
+		path := tempLog(t)
+		c, err := NewChain(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, priv := newSegmentSigningKey(t)
+
+		// Plant a pre-existing rotated-out segment at <base>.001 holding irreplaceable bytes,
+		// WITHOUT a corresponding manifest entry (the manifest under-counts — the attacker model).
+		existing := segmentPath(path, 1)
+		const sentinel = "do-not-destroy-this-segment\n"
+		if err := os.WriteFile(existing, []byte(sentinel), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		const n = 4
+		emitN(t, c, n)
+
+		res, err := c.Rotate(n, "test-log", segmentIssuedAt, priv)
+		if err != nil {
+			t.Fatalf("rotate: %v", err)
+		}
+		if !res.Rotated {
+			t.Fatal("expected Rotated true")
+		}
+
+		// The pre-existing .001 must be byte-for-byte intact.
+		got, err := os.ReadFile(existing)
+		if err != nil {
+			t.Fatalf("existing segment vanished: %v", err)
+		}
+		if string(got) != sentinel {
+			t.Fatalf("existing segment .001 was overwritten: got %q, want %q", string(got), sentinel)
+		}
+
+		// Rotation must have picked the next free number (.002), not clobbered .001.
+		if res.Segment != filepath.Base(segmentPath(path, 2)) {
+			t.Fatalf("rotated segment = %q, want %q (next free number)", res.Segment, filepath.Base(segmentPath(path, 2)))
+		}
+		segCount, err := countRecords(segmentPath(path, 2))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if segCount != n {
+			t.Fatalf("new segment .002 record count = %d, want %d", segCount, n)
+		}
+	})
+
+	t.Run("highestSegmentOnDisk reflects disk, not the manifest", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "audit.log")
+
+		// No segments yet.
+		if h, err := highestSegmentOnDisk(path); err != nil || h != 0 {
+			t.Fatalf("highest with no segments = %d, %v; want 0, nil", h, err)
+		}
+
+		// Plant .001, .002, a checkpoint sidecar, and an unrelated file; only the bare numbered
+		// segments count, so the highest is 2.
+		for _, f := range []string{
+			segmentPath(path, 1),
+			segmentPath(path, 2),
+			checkpointPath(segmentPath(path, 2)), // .002.checkpoint must be ignored
+			path + ".manifest",                   // .manifest must be ignored
+		} {
+			if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		h, err := highestSegmentOnDisk(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if h != 2 {
+			t.Fatalf("highestSegmentOnDisk = %d, want 2", h)
+		}
+	})
+
+	t.Run("repeated rotation never disturbs older segments even with a planted file", func(t *testing.T) {
+		// End-to-end: a first rotation produces .001 (manifest-tracked). An attacker then plants a
+		// bogus .002 on disk. A second rotation must derive the next number from disk (highest=2 ->
+		// .003) and leave BOTH .001 and the planted .002 byte-for-byte intact. This proves the
+		// disk-derived numbering plus the stat guard never let os.Rename clobber an existing
+		// segment, regardless of what the manifest claims (SEC-001).
+		path := tempLog(t)
+		c, err := NewChain(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, priv := newSegmentSigningKey(t)
+
+		// First, a normal rotation creates .001 + manifest entry (highest on disk = 1).
+		emitN(t, c, 3)
+		seg1Head := lastHashOf(t, path)
+		if _, err := c.Rotate(3, "test-log", segmentIssuedAt, priv); err != nil {
+			t.Fatal(err)
+		}
+		seg1Bytes, err := os.ReadFile(segmentPath(path, 1))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Now plant a .002 to occupy the next disk-derived slot, then emit + rotate again. Because
+		// disk-scan sees highest=2, it targets .003 and rotation succeeds without touching .002.
+		const planted = "planted-002-must-survive\n"
+		if err := os.WriteFile(segmentPath(path, 2), []byte(planted), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		emitN(t, c, 3)
+		res, err := c.Rotate(3, "test-log", segmentIssuedAt+1, priv)
+		if err != nil {
+			t.Fatalf("second rotate: %v", err)
+		}
+		if res.Segment != filepath.Base(segmentPath(path, 3)) {
+			t.Fatalf("second rotate segment = %q, want .003", res.Segment)
+		}
+
+		// Neither the manifest-tracked .001 nor the planted .002 may have been overwritten.
+		got1, err := os.ReadFile(segmentPath(path, 1))
+		if err != nil || string(got1) != string(seg1Bytes) {
+			t.Fatalf(".001 was disturbed by second rotation")
+		}
+		got2, err := os.ReadFile(segmentPath(path, 2))
+		if err != nil || string(got2) != planted {
+			t.Fatalf("planted .002 was overwritten: got %q, want %q", string(got2), planted)
+		}
+		_ = seg1Head
+	})
 }
 
 // TC-015-08: docs/spec/data-model.md documents the segment + manifest schemas and the

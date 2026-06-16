@@ -28,6 +28,13 @@ const (
 // fewer records than the configured threshold. Nothing on disk is touched in this case.
 var errBelowRotationThreshold = errors.New("active segment is below rotation threshold")
 
+// errSegmentExists is returned by Rotate when the computed target segment path already exists
+// on disk. The manifest is an attacker-controlled index (not the root of trust), so a forged,
+// truncated, or deleted manifest could otherwise drive Rotate to a low segment number and
+// os.Rename would silently clobber an existing <base>.NNN segment. Rotate refuses instead
+// (SEC-001).
+var errSegmentExists = errors.New("rotate: refusing to overwrite existing segment")
+
 // Segment is one ordered entry in a SegmentManifest. It records the global seq range, the
 // chain head at the segment's start and end, and when the segment was rotated out. Field types
 // are integers only (int64) — this project rejects floats in audited data and keeps manifest
@@ -64,6 +71,36 @@ func segmentPath(logPath string, n int64) string {
 // checkpointPath returns the per-segment checkpoint path for a rotated-out segment file.
 func checkpointPath(segPath string) string {
 	return segPath + CheckpointSuffix
+}
+
+// highestSegmentOnDisk scans logPath's directory for existing rotated-out segments named
+// <base>.NNN (three-or-more-digit, zero-padded suffix) and returns the highest N present, or 0
+// when none exist. Unlike the manifest length, this reflects what is actually on disk, so the
+// next segment number derived from it cannot be driven backwards by a forged/truncated manifest
+// into clobbering a real segment (SEC-001). Checkpoint sidecars (<base>.NNN.checkpoint) and
+// other suffixes are ignored.
+func highestSegmentOnDisk(logPath string) (int64, error) {
+	matches, err := filepath.Glob(logPath + ".[0-9]*")
+	if err != nil {
+		return 0, fmt.Errorf("glob segments: %w", err)
+	}
+	prefix := logPath + "."
+	var highest int64
+	for _, p := range matches {
+		suffix := strings.TrimPrefix(p, prefix)
+		// Reject anything that is not a pure run of digits (e.g. ".001.checkpoint").
+		if suffix == "" || strings.ContainsFunc(suffix, func(r rune) bool { return r < '0' || r > '9' }) {
+			continue
+		}
+		var n int64
+		if _, err := fmt.Sscanf(suffix, "%d", &n); err != nil {
+			continue
+		}
+		if n > highest {
+			highest = n
+		}
+	}
+	return highest, nil
 }
 
 // loadManifest reads and decodes the manifest at path. A missing manifest is reported via
@@ -242,7 +279,9 @@ func (c *Chain) Rotate(threshold int64, logID string, issuedAt int64, privateKey
 		return RotateResult{}, fmt.Errorf("rotate: marshal checkpoint: %w", err)
 	}
 
-	// Compute the next zero-padded segment number from the existing manifest length.
+	// Load the manifest so we can append to it. The manifest is an untrusted index, so its
+	// length is NOT used to pick the next segment number (a forged/truncated manifest could
+	// drive that backwards and clobber an existing segment, SEC-001).
 	m, err := loadManifest(manifestPath(c.path))
 	if err != nil && !os.IsNotExist(err) {
 		return RotateResult{}, fmt.Errorf("rotate: load manifest: %w", err)
@@ -250,8 +289,25 @@ func (c *Chain) Rotate(threshold int64, logID string, issuedAt int64, privateKey
 	if os.IsNotExist(err) {
 		m = SegmentManifest{Format: ManifestFormat, Version: ManifestVersion}
 	}
-	segNum := int64(len(m.Segments)) + 1
+
+	// Derive the next zero-padded segment number from the actual on-disk segment files, not the
+	// manifest length, so a tampered manifest cannot make us overwrite a real segment.
+	highest, err := highestSegmentOnDisk(c.path)
+	if err != nil {
+		return RotateResult{}, fmt.Errorf("rotate: scan segments: %w", err)
+	}
+	segNum := highest + 1
 	segPath := segmentPath(c.path, segNum)
+
+	// Defence in depth: even with the disk-derived number, refuse to rename over an existing
+	// segment rather than let os.Rename silently clobber it. The TOCTOU window is under c.mu
+	// (single-writer), so no concurrent writer can create the file between this stat and the
+	// rename.
+	if _, err := os.Stat(segPath); err == nil {
+		return RotateResult{}, fmt.Errorf("%w: %s", errSegmentExists, segPath)
+	} else if !os.IsNotExist(err) {
+		return RotateResult{}, fmt.Errorf("rotate: stat target segment: %w", err)
+	}
 
 	// (b) rename the active segment to its <base>.NNN sibling.
 	if err := os.Rename(c.path, segPath); err != nil {
