@@ -42,6 +42,15 @@ func NewChain(path string) (*Chain, error) {
 }
 
 func (c *Chain) loadState() error {
+	// Recover the global offset from the manifest, if any. For a never-rotated log (no manifest)
+	// this returns (0, Genesis) and behavior is identical to the single-file degenerate case.
+	offset, head, err := manifestState(c.path)
+	if err != nil {
+		return err
+	}
+	c.seq = offset
+	c.prevHash = head
+
 	f, err := os.OpenFile(c.path, os.O_CREATE|os.O_RDONLY, 0o600)
 	if err != nil {
 		return err
@@ -206,18 +215,30 @@ func (c *Chain) Verify() VerifyResult {
 	return res
 }
 
+// verifyChainState walks a single segment from Genesis with a zero offset. This is the
+// degenerate, never-rotated case and is byte-for-byte identical to the original behavior.
 func verifyChainState(path string) (verifiedChainState, VerifyResult) {
+	return verifyChainStateFrom(path, Genesis, 0)
+}
+
+// verifyChainStateFrom is the parameterized segment walker (ADR-005 §3). It walks the records
+// in path expecting the first record's prev_hash to equal startPrev (Genesis for segment 0,
+// the previous segment's end hash otherwise) and treats startOffset as the number of records
+// already accounted for by earlier segments. The returned treeSize is the cumulative global
+// record count (startOffset + records walked) and lastSeq/rootHash are the global chain head
+// as of this segment's last record. With (Genesis, 0) it reproduces the single-file behavior.
+func verifyChainStateFrom(path, startPrev string, startOffset int64) (verifiedChainState, VerifyResult) {
 	f, err := os.Open(path)
 	if err != nil {
 		return verifiedChainState{}, VerifyResult{Valid: false, Message: "cannot open log: " + err.Error()}
 	}
 	defer f.Close()
 
-	state := verifiedChainState{lastSeq: -1, rootHash: Genesis}
-	prev := Genesis
+	state := verifiedChainState{treeSize: startOffset, lastSeq: startOffset - 1, rootHash: startPrev}
+	prev := startPrev
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 1024*1024), 16*1024*1024)
-	i := int64(0)
+	i := startOffset
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" {

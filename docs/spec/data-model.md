@@ -1,6 +1,6 @@
 # Data Model
 
-**Project:** audit-trail · **Last updated:** 2026-06-03
+**Project:** audit-trail · **Last updated:** 2026-06-16
 
 ## Persistent store — the JSONL logfile
 
@@ -41,7 +41,7 @@ own input.
 
 | Field | Type | Sharing / lock |
 |-------|------|----------------|
-| `mu` | `sync.Mutex` | Guards `Emit`; the single-writer lock. |
+| `mu` | `sync.Mutex` | Guards `Emit`, `BuildCheckpointPayload`, and `Rotate`; the single-writer lock. |
 | `path` | string | Immutable after `NewChain`. |
 | `seq` | int64 | Next sequence number; advanced under `mu`. |
 | `prevHash` | string | Current chain head; advanced under `mu`. |
@@ -99,6 +99,69 @@ non-empty log, a 64-character lowercase-hex `root_hash`, the literal hash algori
 non-negative `issued_at`. Signing refuses malformed payloads. Verification also refuses
 malformed payloads, unknown algorithms, key-id mismatches, malformed signature encodings,
 wrong-length signatures, wrong keys, and altered signed content.
+
+## Log segments and the segment manifest
+
+When the log is rotated (ADR-005), the single JSONL file becomes an **ordered sequence of
+segments** held together by the same SHA-256 hash chain that links records. A never-rotated log
+has no manifest and is byte-identical to the single-file case above (the degenerate case).
+
+### Segment (on disk)
+
+A segment is a JSONL file of audit records, identical in record format to the single log.
+
+| Aspect | Value |
+|--------|-------|
+| Active segment | File at `Chain.path` (e.g. `audit.log`) — still taking writes. |
+| Rotated-out segment | Sibling `<base>.NNN`, zero-padded monotonic (`audit.log.001`, `audit.log.002`, …; `n = manifest length + 1`). |
+| Per-segment checkpoint | `<base>.NNN.checkpoint`, mode `0600` — an ADR-003 signed checkpoint over the **cumulative** chain head at that boundary (`tree_size`/`last_seq`/`root_hash` are global, not a per-segment subtree). |
+| Record format | Unchanged (`{seq, ts, actor, action, target, decision, refs, context, prev_hash, hash}`). |
+
+### `SegmentManifest` (segment.go)
+
+JSON index at `<base>.manifest`, mode `0600`, written **atomically** (temp file in the same
+directory → `os.Rename`, so a concurrent reader sees either the old manifest or the complete new
+one, never a partial write). The manifest is an enumeration index, **not** the root of trust —
+tamper-evidence stays cryptographic.
+
+| Field | Type | Source | Notes |
+|-------|------|--------|-------|
+| `format` | string | constant | Literal `audit-trail-manifest-v1`. |
+| `version` | int (int64) | constant | Literal `1`. |
+| `segments` | array | rotation | Ordered list of segment entries, oldest first. |
+
+Each `segments[]` entry (`Segment`):
+
+| Field | Type | Source | Notes |
+|-------|------|--------|-------|
+| `segment` | string | rotation | Rotated-out segment filename (e.g. `audit.log.001`). |
+| `first_seq` | int (int64) | rotation | Global `seq` of the segment's first record. |
+| `last_seq` | int (int64) | rotation | Global `seq` of the segment's last record. |
+| `start_prev_hash` | string | rotation | `prev_hash` the segment's first record carries (`Genesis` for segment 0, the previous segment's `end_hash` otherwise). |
+| `end_hash` | string | rotation | The segment's last record's `hash` — the chain head at this boundary. |
+| `issued_at` | int (int64) | caller | Unix seconds when the segment was rotated out. |
+
+All numeric manifest fields are Go `int64` — no floats reach the manifest, consistent with the
+no-floats invariant for audited data.
+
+### Seam-continuity invariant (enforced at rotation)
+
+> The `prev_hash` of the **first** record in segment N+1 equals the `hash` of the **last**
+> record in segment N (Genesis for segment 0).
+
+`Chain.Rotate()` carries `Chain.seq` and `Chain.prevHash` across the boundary unchanged when it
+opens the fresh active segment, so the next `Emit()` writes the seam link automatically — there
+is no separate bridge record. `loadState()` recovers the **global** offset from the manifest
+(`last_seq + 1` and the last `end_hash`) before scanning the active segment, so a restart
+mid-rotated-log resumes the correct global `seq` and `prevHash` from the active segment plus the
+manifest. With no manifest, `loadState()` starts at `(0, Genesis)` exactly as before.
+
+The rotation trigger is an **event-count threshold** on the active segment's record count:
+`Rotate()` declines (no files touched, sentinel `errBelowRotationThreshold`) below the
+threshold and proceeds at or above it. `Verify()`'s parameterized walker
+(`verifyChainStateFrom(path, startPrev, startOffset)`) reproduces the single-file walk with
+`(Genesis, 0)` and lets a rotated segment N>0 be re-verified/re-anchored from its non-Genesis
+start hash and cumulative offset.
 
 ## Wire / interchange formats
 
