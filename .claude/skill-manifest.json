@@ -182,6 +182,31 @@
         "template": "assets/templates/common/scripts/finish-task.sh",
         "installed_hash": "80d8c989d816664e16d25b4d8f64a30022a6d5e0b31829e7061d33e565da3055",
         "template_hash": "80d8c989d816664e16d25b4d8f64a30022a6d5e0b31829e7061d33e565da3055"
+      },
+      ".claude/backlog-playbook.md": {
+        "template": "assets/templates/tech/.claude/backlog-playbook.md",
+        "installed_hash": "40503ee6c37391ce03a82e9430e06a0a86d94d1627191990206f70b9a85d8f42",
+        "template_hash": "40503ee6c37391ce03a82e9430e06a0a86d94d1627191990206f70b9a85d8f42"
+      },
+      ".claude/commands/backlog-run.md": {
+        "template": "assets/templates/tech/.claude/commands/backlog-run.md",
+        "installed_hash": "21d007a7d505725debd3eb732501b63f8ca5ec38020d07b633ea584440f0e026",
+        "template_hash": "21d007a7d505725debd3eb732501b63f8ca5ec38020d07b633ea584440f0e026"
+      },
+      ".claude/commands/backlog-run-parallel.md": {
+        "template": "assets/templates/tech/.claude/commands/backlog-run-parallel.md",
+        "installed_hash": "4d095b6001b9c7ee600675b7a95cc642796663effcf0693d701ac36e4aab1d78",
+        "template_hash": "4d095b6001b9c7ee600675b7a95cc642796663effcf0693d701ac36e4aab1d78"
+      },
+      ".claude/commands/backlog-autopilot.md": {
+        "template": "assets/templates/tech/.claude/commands/backlog-autopilot.md",
+        "installed_hash": "37b03f82bdaa93a47276b2ce67d1a2d9086737c1e8ea77a79cd5cdbeee696633",
+        "template_hash": "37b03f82bdaa93a47276b2ce67d1a2d9086737c1e8ea77a79cd5cdbeee696633"
+      },
+      ".claude/commands/backlog-autopilot-parallel.md": {
+        "template": "assets/templates/tech/.claude/commands/backlog-autopilot-parallel.md",
+        "installed_hash": "32b2deb82257ecea68495d0abd8485096a4b7ef0d2f9a6c954a7fd2cceb705ed",
+        "template_hash": "32b2deb82257ecea68495d0abd8485096a4b7ef0d2f9a6c954a7fd2cceb705ed"
       }
     }
   }
