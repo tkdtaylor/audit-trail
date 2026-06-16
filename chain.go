@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -210,8 +211,110 @@ type verifiedChainState struct {
 }
 
 // Verify walks the on-disk chain. Deterministic and offline.
+//
+// For a never-rotated log (no manifest on disk) it is byte-for-byte identical to the original
+// single-file walk (the degenerate 1-segment case). For a rotated log it loads the manifest and
+// walks every rotated-out segment in manifest order plus the active segment, threading the
+// carried ending prev_hash and seq offset from each segment into the next (Genesis/0 for the
+// first), applying the cross-segment seam check at every boundary and cross-checking each
+// segment's walked result against the manifest's recorded values. It always reads from disk and
+// never trusts in-memory c.prevHash / c.seq (ADR-005 §3).
 func (c *Chain) Verify() VerifyResult {
-	_, res := verifyChainState(c.path)
+	return verifyAcrossSegments(c.path)
+}
+
+// verifyAcrossSegments is the cross-segment walker (REQ-016-01..07). It loads the manifest for
+// the chain whose active segment is at logPath; with no manifest (or an empty one) it falls back
+// to the exact single-file path so the degenerate case is unchanged.
+func verifyAcrossSegments(logPath string) VerifyResult {
+	m, err := loadManifest(manifestPath(logPath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Degenerate, never-rotated log: identical to the original single-file walk.
+			_, res := verifyChainState(logPath)
+			return res
+		}
+		return VerifyResult{Valid: false, Message: "cannot read manifest: " + err.Error()}
+	}
+	if len(m.Segments) == 0 {
+		_, res := verifyChainState(logPath)
+		return res
+	}
+
+	dir := filepath.Dir(logPath)
+	prev := Genesis
+	var offset int64 // global record count accounted for by earlier segments
+
+	// Walk each rotated-out segment in manifest order, threading the carried head + offset.
+	for _, seg := range m.Segments {
+		segFile := filepath.Join(dir, seg.Segment)
+
+		// Dropped segment: listed in the manifest but missing from disk (REQ-016-04).
+		if _, statErr := os.Stat(segFile); statErr != nil {
+			if os.IsNotExist(statErr) {
+				at := offset
+				return VerifyResult{Valid: false, TamperDetectedAt: &at,
+					Message: "segment missing from disk: " + seg.Segment}
+			}
+			return VerifyResult{Valid: false, Message: "cannot stat segment " + seg.Segment + ": " + statErr.Error()}
+		}
+
+		// Walk the segment from the ACTUAL carried head + offset (derived from on-disk hashes,
+		// NOT from the manifest's recorded values — the manifest is an index, not the root of
+		// trust). A broken first-record prev_hash here is the seam check (REQ-016-02/05): a
+		// reordered or seam-tampered segment fails to link to the prior segment's real head.
+		state, res := verifyChainStateFrom(segFile, prev, offset)
+		if !res.Valid {
+			return res
+		}
+
+		// Manifest-vs-content cross-check (SEC-002 / ADR-005 Integrity risks): the manifest's
+		// recorded start_prev_hash / first_seq / last_seq / end_hash must match what the segment
+		// actually contains on disk. A forged manifest field cannot make an intact chain pass
+		// nor mask a tampered one.
+		if seg.StartPrevHash != prev {
+			at := offset
+			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: "manifest start_prev_hash mismatch for segment " + seg.Segment}
+		}
+		if seg.FirstSeq != offset {
+			at := offset
+			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: "manifest first_seq mismatch for segment " + seg.Segment}
+		}
+		if seg.LastSeq != state.lastSeq {
+			at := state.lastSeq
+			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: "manifest last_seq mismatch for segment " + seg.Segment}
+		}
+		if seg.EndHash != state.rootHash {
+			at := state.lastSeq
+			return VerifyResult{Valid: false, TamperDetectedAt: &at,
+				Message: "manifest end_hash mismatch for segment " + seg.Segment}
+		}
+
+		prev = state.rootHash
+		offset = state.treeSize
+	}
+
+	// Orphan / truncation defense (SEC-003): refuse to silently treat the chain as a clean
+	// shorter log when on-disk <base>.NNN segments exist beyond the manifest's coverage (e.g. a
+	// crash mid-rotate left a rotated-out segment unlisted). highestSegmentOnDisk returns 0 when
+	// there are no rotated-out files at all, so this never trips the degenerate no-segments case.
+	highest, err := highestSegmentOnDisk(logPath)
+	if err != nil {
+		return VerifyResult{Valid: false, Message: "cannot scan segments: " + err.Error()}
+	}
+	if highest > int64(len(m.Segments)) {
+		orphan := segmentPath(logPath, int64(len(m.Segments))+1)
+		return VerifyResult{Valid: false,
+			Message: "on-disk segment beyond manifest coverage: " + filepath.Base(orphan)}
+	}
+
+	// Finally walk the active segment at logPath, carrying the last rotated-out segment's head
+	// and offset. The seam between the last rotated-out segment and the active segment is checked
+	// here too (the active segment's first record must link to the prior head).
+	_, res := verifyChainStateFrom(logPath, prev, offset)
 	return res
 }
 
