@@ -9,7 +9,7 @@ it must survive agent compromise.
 - **Deterministic & offline:** `verify()` walks the chain with no external oracle
 - **Standalone:** any process or block can emit; CLI + Unix-socket IPC forms
 
-> Prior-art verdict: **BUILD** the hash-chain (RFC 6962 pattern + RFC 8785/JCS canonicalization). sigstore/Rekor and immudb (both Apache-2.0) are reference designs + optional v1 pluggable backends. The value-add is the agent-centric event schema + deterministic verify + multi-block integration. **License: PolyForm Noncommercial 1.0.0.**
+> Prior-art verdict: **BUILD** the hash-chain (RFC 6962 pattern + RFC 8785/JCS canonicalization). sigstore/Rekor and immudb (both Apache-2.0) are reference designs + optional v1 pluggable backends. The value-add is the agent-centric event schema + deterministic verify + multi-block integration. **License: Apache-2.0.**
 
 ## Contract (interface-contracts.md §2, v1)
 
@@ -49,3 +49,26 @@ pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
 Adopts **RFC 6962** (Merkle/transparency-log pattern), **RFC 8785** (canonical JSON),
 **in-toto/SLSA** attestation refs in `refs`, **OpenTelemetry** logs as an optional export.
 Pluggable backends behind the emit/verify seam: Rekor, immudb, PostgreSQL, SQLite.
+
+## License
+
+audit-trail is licensed under the **Apache License 2.0** — free to use, modify, and distribute, including in commercial and proprietary products. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+> **Security notice:** audit-trail is a security tool provided **as-is, without warranty**. It does not guarantee the security of any system. See the disclaimer in [NOTICE](NOTICE).
+
+## Enterprise Support
+
+Need hardened deployments, integration help, or a support SLA? **Commercial support and consulting are available.**
+
+📧 Contact **[tools@taylorguard.me](mailto:tools@taylorguard.me)**
+
+## Sponsorship
+
+audit-trail is independent, open-source security tooling. If it saves you time or risk, consider sponsoring continued development:
+
+- 💜 [GitHub Sponsors](https://github.com/sponsors/tkdtaylor)
+<!-- - 🤝 [Open Collective](https://opencollective.com/audit-trail)  (uncomment once the collective exists) -->
+
+## Contributing
+
+Contributions are welcome and become part of the project under Apache-2.0. See [CONTRIBUTING.md](CONTRIBUTING.md). We use the **Developer Certificate of Origin (DCO)** — sign off your commits with `git commit -s`. No CLA required.

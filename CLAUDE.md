@@ -1,7 +1,7 @@
 # audit-trail — project instructions
 
 Hash-chained, append-only forensic log. The **spine** every other ecosystem block emits to.
-Go, standard library only (crypto/sha256, encoding/json, net). PolyForm Noncommercial 1.0.0.
+Go, standard library only (crypto/sha256, encoding/json, net). Apache-2.0.
 
 ## What this block is
 

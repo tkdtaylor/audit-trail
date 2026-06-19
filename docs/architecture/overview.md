@@ -57,7 +57,7 @@ Two transports drive the same two verbs:
 
 ## Key dependencies
 
-**None beyond the Go standard library**, by design (PolyForm Noncommercial; minimal trust
+**None beyond the Go standard library**, by design (Apache-2.0; minimal trust
 surface). The integrity primitives are `crypto/sha256` + `encoding/hex`; canonicalization and
 the wire format are `encoding/json`; persistence is `os`/`bufio`; IPC is `net` (Unix domain
 socket). No third-party modules in [go.mod](../../go.mod).

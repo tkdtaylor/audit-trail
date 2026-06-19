@@ -52,7 +52,7 @@ goroutines, but all writes funnel through that lock — there is exactly one wri
 
 Flat single-package layout (4 source files + `chain_test.go`). Build/test via
 [Makefile](../../../Makefile) (`make build` → `bin/audit-trail`, `make test`, `make fmt`) or
-plain `go build ./...` / `go test ./...`. License: PolyForm Noncommercial 1.0.0.
+plain `go build ./...` / `go test ./...`. License: Apache-2.0.
 
 ## Consequences
 
