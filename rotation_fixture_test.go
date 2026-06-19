@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package main
 
 // TC-018-01: committed multi-segment fixtures verify intact (fitness-rotation-stability).

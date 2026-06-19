@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 // Command audit-trail is the hash-chained, append-only forensic spine of the secure-agent
 // ecosystem. Every block emits to it; verify() walks the chain and detects any tamper.
 //
