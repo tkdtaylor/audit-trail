@@ -1,8 +1,6 @@
 # audit-trail — tamper-evident, hash-chained action log
 
-The **spine** of the secure-agent ecosystem. Every block emits to it; nothing else is
-trusted to record what happened. It is a *forensic archive*, not observability telemetry —
-it must survive agent compromise.
+The **spine** of the secure-agent ecosystem. Every block emits to it; nothing else is trusted to record what happened. It is a *forensic archive*, not observability telemetry — it must survive agent compromise.
 
 - **Append-only & hash-chained:** `hash = SHA256( prev_hash + JCS(event) )`
 - **Tamper-evident:** any alteration — down to a single byte — fails `verify()`
@@ -30,9 +28,7 @@ event = { ts, actor, action, target, decision?, refs:[{type,id}], context?, prev
 verify() -> { valid, tamper_detected_at, message }
 ```
 
-Canonicalization is **RFC 8785 (JCS)** — validated by the tracer-bullet (decisions.md D2);
-audited events use integer/string values only (floats are kept out, the one JCS-divergence
-point).
+Canonicalization is **RFC 8785 (JCS)** — validated by the tracer-bullet (decisions.md D2); audited events use integer/string values only (floats are kept out, the one JCS-divergence point).
 
 ## Build & run
 
@@ -45,15 +41,17 @@ audit-trail emit   --logfile audit.log --actor vault --action resolve --target v
 audit-trail verify --logfile audit.log                            # exits non-zero on tamper
 ```
 
-IPC request shape (newline-delimited JSON on the Unix socket): `{"op":"emit","event":{…}}`,
-`{"op":"verify"}`, `{"op":"ping"}`.
+IPC request shape (newline-delimited JSON on the Unix socket): `{"op":"emit","event":{…}}`, `{"op":"verify"}`, `{"op":"ping"}`.
+
+## Documentation
+
+- [docs/architecture/overview.md](docs/architecture/overview.md) — system design and design principles
+- [docs/architecture/diagrams.md](docs/architecture/diagrams.md) — C4 diagrams and runtime flows
+- [docs/spec/SPEC.md](docs/spec/SPEC.md) — authoritative spec
 
 ## Status
 
-🚧 **v0 implementation, v1 contract.** Functional emit/verify + RFC 8785 + IPC/CLI + tests
-(ported from the tracer-bullet reference). Deferred to v1+: signed
-checkpoints (RFC 6962 STH), witness/Rekor anchoring, log rotation, indexed query API,
-pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
+🚧 **v0 implementation, v1 contract.** Functional emit/verify + RFC 8785 + IPC/CLI + tests (ported from the tracer-bullet reference). Deferred to v1+: signed checkpoints (RFC 6962 STH), witness/Rekor anchoring, log rotation, indexed query API, pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
 
 ## Adapter seam & standards
 
