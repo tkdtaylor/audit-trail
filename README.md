@@ -11,6 +11,17 @@ it must survive agent compromise.
 
 > Prior-art verdict: **BUILD** the hash-chain (RFC 6962 pattern + RFC 8785/JCS canonicalization). sigstore/Rekor and immudb (both Apache-2.0) are reference designs + optional v1 pluggable backends. The value-add is the agent-centric event schema + deterministic verify + multi-block integration. **License: Apache-2.0.**
 
+## Scope
+
+**What audit-trail does:** a tamper-evident, hash-chained forensic log of agent actions, with an offline verify API.
+
+**What it does *not* do (it records; others act on the record):**
+- Detect rogue agents or cascading failures — external monitoring does
+- Prevent or enforce actions → **policy-engine**
+- Raise real-time alerts or trip kill-switches → observability tooling / **agent-mesh**
+
+`audit-trail` is one block in a composable secure-agent ecosystem — each block is standalone and independently usable, and composes with its siblings over published contracts rather than absorbing their responsibilities (no central "god object").
+
 ## Contract (interface-contracts.md §2, v1)
 
 ```
@@ -67,7 +78,6 @@ Need hardened deployments, integration help, or a support SLA? **Commercial supp
 audit-trail is independent, open-source security tooling. If it saves you time or risk, consider sponsoring continued development:
 
 - 💜 [GitHub Sponsors](https://github.com/sponsors/tkdtaylor)
-<!-- - 🤝 [Open Collective](https://opencollective.com/audit-trail)  (uncomment once the collective exists) -->
 
 ## Contributing
 
