@@ -15,8 +15,8 @@ The **spine** of the secure-agent ecosystem. Every block emits to it; nothing el
 
 **What it does *not* do (it records; others act on the record):**
 - Detect rogue agents or cascading failures — external monitoring does
-- Prevent or enforce actions → **policy-engine**
-- Raise real-time alerts or trip kill-switches → observability tooling / **agent-mesh**
+- Prevent or enforce actions → **[policy-engine](https://github.com/tkdtaylor/policy-engine)**
+- Raise real-time alerts or trip kill-switches → observability tooling / **[agent-mesh](https://github.com/tkdtaylor/agent-mesh)**
 
 `audit-trail` is one block in a composable secure-agent ecosystem — each block is standalone and independently usable, and composes with its siblings over published contracts rather than absorbing their responsibilities (no central "god object").
 
