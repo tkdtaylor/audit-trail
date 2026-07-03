@@ -22,14 +22,14 @@ or `Code generated ... DO NOT EDIT.` files present. `testdata/segments/generate/
 carries `//go:build ignore`; SPDX placed above the constraint with the blank line before
 `package` preserved. `go build ./...` passes; `gofmt -l .` clean.
 
-### REQ-019-02: Publish
-This repo has no git remote yet. When ready, create the GitHub remote and push. Confirm
-public/private visibility intent at that point.
+### REQ-019-02: Publish — DONE
+Remote created and pushed: `tkdtaylor/audit-trail`, visibility confirmed **private** by the
+operator; DCO workflow + FUNDING present on the remote.
 
 ## Acceptance criteria
 
 - TC-019-01: Every first-party `.go` file has the SPDX Apache-2.0 header as its first line. ✅ DONE
-- TC-019-02: GitHub remote created and the repo pushed. ⏳ PENDING (awaits user creating a remote)
+- TC-019-02: GitHub remote created and the repo pushed. ✅ DONE (private `tkdtaylor/audit-trail`)
 
 ## Notes
 
