@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -28,16 +29,33 @@ type CheckpointServerConfig struct {
 	RotateAfter int64
 }
 
-// serve runs the JSON-over-Unix-socket IPC form of the contract (interface-contracts §1):
+// serve runs the JSON-over-Unix-socket IPC form of the contract (docs/CONTRACT.md):
 // one newline-terminated JSON request {op: emit|verify|ping} -> one JSON response.
-func serve(socketPath string, chain *Chain, checkpointConfig CheckpointServerConfig) error {
+// listenUnix opens the IPC socket with owner-only permissions from the moment it
+// exists: the umask is narrowed around the bind so there is no window in which the
+// socket is group/world-accessible, and the follow-up Chmod (belt-and-braces for
+// platforms that ignore the umask on socket inodes) is error-checked, not discarded.
+func listenUnix(socketPath string) (net.Listener, error) {
 	_ = os.Remove(socketPath)
+	old := syscall.Umask(0o177)
 	ln, err := net.Listen("unix", socketPath)
+	syscall.Umask(old)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(socketPath, 0o600); err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	return ln, nil
+}
+
+func serve(socketPath string, chain *Chain, checkpointConfig CheckpointServerConfig) error {
+	ln, err := listenUnix(socketPath)
 	if err != nil {
 		return err
 	}
 	defer ln.Close()
-	_ = os.Chmod(socketPath, 0o600)
 
 	for {
 		conn, err := ln.Accept()
