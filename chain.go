@@ -126,6 +126,10 @@ func (c *Chain) Emit(event map[string]any) (map[string]any, error) {
 		f.Close()
 		return nil, err
 	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return nil, err
+	}
 	if err := f.Close(); err != nil {
 		return nil, err
 	}

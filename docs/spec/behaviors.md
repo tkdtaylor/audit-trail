@@ -15,7 +15,8 @@ Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go]
   hash.
 - **Side effects:** Builds a record `{seq, ts, actor, action, target, decision, refs, context,
   prev_hash}`, computes `hash = SHA256(prev_hash + canonical(record))`, and appends
-  `"<json>\n"` to the logfile. Advances in-memory `seq` (+1) and `prevHash` (← new hash).
+  `"<json>\n"` to the logfile, fsyncing before returning (durability over throughput,
+  matching the rotation paths). Advances in-memory `seq` (+1) and `prevHash` (← new hash).
 - **Defaults / normalization:** `refs` defaults to `[]`, `context` to `{}`, `ts` is coerced to
   int64, missing optional fields are stored as `null`. Via CLI, `ts` is `time.Now().Unix()` and
   `decision` is omitted from the event when the flag is empty.
