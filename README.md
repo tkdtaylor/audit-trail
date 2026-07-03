@@ -20,7 +20,7 @@ The **spine** of the secure-agent ecosystem. Every block emits to it; nothing el
 
 `audit-trail` is one block in a composable secure-agent ecosystem — each block is standalone and independently usable, and composes with its siblings over published contracts rather than absorbing their responsibilities (no central "god object").
 
-## Contract (interface-contracts.md §2, v1)
+## Contract ([docs/CONTRACT.md](docs/CONTRACT.md), v1)
 
 ```
 emit(event) -> { seq, hash }
@@ -28,7 +28,7 @@ event = { ts, actor, action, target, decision?, refs:[{type,id}], context?, prev
 verify() -> { valid, tamper_detected_at, message }
 ```
 
-Canonicalization is **RFC 8785 (JCS)** — validated by the tracer-bullet (decisions.md D2); audited events use integer/string values only (floats are kept out, the one JCS-divergence point).
+Canonicalization is **RFC 8785 (JCS)** — validated by the ecosystem tracer-bullet (tracer decision D2); audited events use integer/string values only (floats are kept out, the one JCS-divergence point).
 
 ## Build & run
 
@@ -51,7 +51,7 @@ IPC request shape (newline-delimited JSON on the Unix socket): `{"op":"emit","ev
 
 ## Status
 
-🚧 **v0 implementation, v1 contract.** Functional emit/verify + RFC 8785 + IPC/CLI + tests (ported from the tracer-bullet reference). Deferred to v1+: signed checkpoints (RFC 6962 STH), witness/Rekor anchoring, log rotation, indexed query API, pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
+🟢 **v1 contract; working implementation.** Functional emit/verify + RFC 8785 canonicalization + IPC/CLI + tests (core ported from the ecosystem tracer-bullet), plus **signed checkpoints** (RFC 6962 STH), **witness/Rekor anchoring**, and **log rotation** with cross-segment verify (tasks 005–018). Still deferred: indexed query API, pluggable backends. See [docs/CONTRACT.md](docs/CONTRACT.md).
 
 ## Adapter seam & standards
 

@@ -68,5 +68,6 @@ checkpoint signing operation is requested; it does not persist private key mater
 `loadState` and `Verify` use a `bufio.Scanner` with a 16 MiB max line size (1 MiB initial).
 A single record larger than 16 MiB would fail to scan. Not a tunable today.
 
-> **TODO (user confirm):** Is the 16 MiB per-line ceiling an intended hard limit, or should it
-> be configurable / removed for very large `context` blobs? Candidate fitness/limit decision.
+> **Open design note:** the 16 MiB per-line ceiling is a fixed limit today, not a tunable.
+> Whether it should become configurable (or be lifted for very large `context` blobs) is an
+> open decision — a candidate fitness/limit rule when the need arises.

@@ -2,7 +2,7 @@
 // Command audit-trail is the hash-chained, append-only forensic spine of the secure-agent
 // ecosystem. Every block emits to it; verify() walks the chain and detects any tamper.
 //
-// Contract (interface-contracts.md §2, v1):
+// Contract (docs/CONTRACT.md, v1):
 //
 //	emit(event) -> { seq, hash }
 //	verify()    -> { valid, tamper_detected_at, message }

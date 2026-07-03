@@ -13,7 +13,7 @@ import (
 // HTML-escaping disabled is byte-identical to a full JCS implementation: it sorts object
 // keys, emits no insignificant whitespace, and renders int64 as its shortest decimal form.
 // Floats are deliberately kept out of audited events (the one place a naive serializer
-// would diverge from JCS — see decisions.md D2 in the tracer).
+// would diverge from JCS — see tracer decision D2).
 func canonical(v map[string]any) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)

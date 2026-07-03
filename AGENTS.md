@@ -34,10 +34,8 @@ Go, standard library only (`crypto/sha256`, `encoding/json`, `net`). Apache-2.0.
 - Two transports, same verbs: **CLI** (`emit`/`verify`) and **Unix-socket IPC**
   (`serve`).
 
-The external planning hub remains the cross-ecosystem source of truth for the
-*contract*:
-the project's internal design notes and
-`interface-contracts.md` (v1), validated by the tracer-bullet reference. The
+The authoritative contract statement is [docs/CONTRACT.md](docs/CONTRACT.md) (v1),
+validated by the ecosystem tracer-bullet. The
 in-repo `docs/spec/` describes *this implementation*. When behavior changes, update
 the relevant `docs/spec/` file in the same commit.
 
