@@ -1,6 +1,6 @@
 # Behaviors
 
-**Project:** audit-trail · **Last updated:** 2026-06-03
+**Project:** audit-trail · **Last updated:** 2026-07-12
 
 Observable behaviors of audit-trail. Each is numbered `B-NNN`. Source: [main.go](../../main.go),
 [ipc.go](../../ipc.go), [chain.go](../../chain.go), validated by [chain_test.go](../../chain_test.go).
@@ -261,4 +261,18 @@ Runtime checkpoint IPC operations are `checkpoint_create` and `checkpoint_verify
 - **v1 preservation:** All existing `emit`/`verify`/`ping`/`checkpoint_*` CLI and IPC shapes
   are unchanged. `verify` now walks all segments (manifest + active) and returns the same
   `{valid, tamper_detected_at, message}` shape.
+
+## B-015 - Query the log through runtime surfaces
+
+- **CLI trigger:** `audit-trail query --logfile <path> [--actor A] [--action A] [--target T] [--decision D] [--seq-min N] [--seq-max N] [--ts-min N] [--ts-max N] [--limit N] [--token T]`.
+- **IPC trigger:** `{"op":"query","filter":{…},"limit":N,"token":"…"}` sent to a daemon started with `--logfile <path>` (no additional configuration required; `query` is read-only).
+- **Filters:** `actor`/`action`/`target`/`decision` are exact string matches; `seq_min`/`seq_max`/`ts_min`/`ts_max` are inclusive int64 ranges. All filter fields are optional and AND-combined (a filter with no fields matches every record). Results are ordered ascending by `seq`.
+- **Pagination:** `limit` defaults to 100, capped at 1000. `next_token` is the decimal string of the global `seq` at which a subsequent scan should resume; it is non-null only when at least one further matching record exists beyond the returned page, so a page that exactly exhausts the matches reports `next_token:null` rather than a phantom next page. A token is only meaningful when resubmitted with the same filter (ADR-006 §3).
+- **Cross-segment:** the scan walks every rotated-out segment in manifest order, then the active segment, the same segment enumeration order `Verify()` uses. A manifest segment filename that is not a bare base filename (e.g. contains `..` or a path separator) makes the query fail closed with an error rather than reading outside the log directory.
+- **Verbatim results:** `results` are the stored JSONL lines exactly as they exist on disk (`json.RawMessage`), never re-marshalled, re-hashed, or re-canonicalized. A tampered byte in a stored record is returned tampered, not repaired by a round trip through a decoded map.
+- **No persisted index:** every query re-walks the log from disk; nothing is written by `query`, and `Chain.Emit` gains no new hook (ADR-006 §1). `query` takes no `Chain.mu` lock and opens every segment `O_RDONLY`, so it never blocks on, or is blocked by, a concurrent `emit`/`rotate`.
+- **Unverified-log behavior:** every response carries the outcome of a fresh `verifyAllSegments` disk walk in `verified`/`tamper_detected_at`/`message`. A log that fails verification still returns its matching results, flagged `verified:false` rather than refused (ADR-006 §2). This is the one place in the project where a failing `Verify()` does not stop a read.
+- **CLI exit codes:** 0 on any served query, including `verified:false` (the flag is the signal, not the exit code, unlike `cmdVerify` whose job is the verdict); 1 on an operational error such as an unreadable logfile; 2 on a usage error such as an out-of-range `--limit` or a non-numeric `--token`/range flag.
+- **Malformed requests:** an unrecognized filter key, a non-integer JSON number in a range field, a non-string value in a string field, `limit` outside `1..1000`, or a non-numeric `token` return the shared `{error:{code:"bad_request",message,retryable:false}}` shape with no `results` field.
+- **v1 preservation:** all existing CLI subcommands and IPC ops are byte-shape unchanged; `query` is additive only, and does not touch `Emit`, `Verify`, `verifyAllSegments`, or `canonical()`.
 

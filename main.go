@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -44,13 +45,15 @@ func main() {
 		cmdCheckpoint(os.Args[2:])
 	case "rotate":
 		cmdRotate(os.Args[2:])
+	case "query":
+		cmdQuery(os.Args[2:])
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: audit-trail <serve|emit|verify|checkpoint|rotate> [flags]")
+	fmt.Fprintln(os.Stderr, "usage: audit-trail <serve|emit|verify|checkpoint|rotate|query> [flags]")
 	os.Exit(2)
 }
 
@@ -255,6 +258,83 @@ func cmdRotate(args []string) {
 	}
 	// errBelowRotationThreshold is a non-error outcome: print {rotated:false} and exit 0.
 	printJSON(res)
+}
+
+// cmdQuery implements the "query" CLI subcommand (REQ-020-10). Flags mirror QueryFilter's
+// fields; range flags are strings so an unset flag (empty string) is distinguishable from an
+// explicit "0", which is a legitimate seq/ts bound. Exit codes: 0 on any served query, including
+// verified:false (the flag is the signal, unlike cmdVerify whose job is the verdict); 1 on an
+// operational error such as an unreadable logfile (via check()); 2 on a usage error (an
+// out-of-range --limit or a non-numeric --token/range flag).
+func cmdQuery(args []string) {
+	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	logfile := fs.String("logfile", "audit.log", "JSONL log path")
+	actor := fs.String("actor", "", "filter: exact actor match (optional)")
+	action := fs.String("action", "", "filter: exact action match (optional)")
+	target := fs.String("target", "", "filter: exact target match (optional)")
+	decision := fs.String("decision", "", "filter: exact decision match (optional)")
+	seqMin := fs.String("seq-min", "", "filter: minimum seq, inclusive (optional)")
+	seqMax := fs.String("seq-max", "", "filter: maximum seq, inclusive (optional)")
+	tsMin := fs.String("ts-min", "", "filter: minimum ts, inclusive (optional)")
+	tsMax := fs.String("ts-max", "", "filter: maximum ts, inclusive (optional)")
+	limit := fs.Int64("limit", defaultQueryLimit, "max results per page (1..1000)")
+	token := fs.String("token", "", "continuation token from a previous page (optional)")
+	fs.Parse(args)
+
+	var f QueryFilter
+	if *actor != "" {
+		f.Actor = actor
+	}
+	if *action != "" {
+		f.Action = action
+	}
+	if *target != "" {
+		f.Target = target
+	}
+	if *decision != "" {
+		f.Decision = decision
+	}
+	f.SeqMin = cmdQueryOptionalInt("seq-min", *seqMin)
+	f.SeqMax = cmdQueryOptionalInt("seq-max", *seqMax)
+	f.TsMin = cmdQueryOptionalInt("ts-min", *tsMin)
+	f.TsMax = cmdQueryOptionalInt("ts-max", *tsMax)
+
+	if *limit < 1 || *limit > maxQueryLimit {
+		fmt.Fprintf(os.Stderr, "query: --limit must be between 1 and %d\n", maxQueryLimit)
+		os.Exit(2)
+	}
+
+	var resumeSeq int64
+	if *token != "" {
+		n, err := strconv.ParseInt(*token, 10, 64)
+		if err != nil || n < 0 {
+			fmt.Fprintln(os.Stderr, "query: --token must be a non-negative integer string")
+			os.Exit(2)
+		}
+		resumeSeq = n
+	}
+
+	resp, err := runQuery(*logfile, f, *limit, resumeSeq)
+	check(err)
+
+	b, err := marshalQueryResponseIndent(resp)
+	check(err)
+	fmt.Println(string(b))
+}
+
+// cmdQueryOptionalInt parses an optional --seq-min/--seq-max/--ts-min/--ts-max flag value. An
+// empty string means "not provided"; anything else must be a valid int64 or the command exits 2
+// (usage error).
+func cmdQueryOptionalInt(flagName, val string) *int64 {
+	if val == "" {
+		return nil
+	}
+	n, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "query: --%s must be an integer\n", flagName)
+		os.Exit(2)
+	}
+	return &n
 }
 
 func cmdCheckpointAnchor(args []string) {
