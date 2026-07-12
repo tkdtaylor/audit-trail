@@ -145,6 +145,13 @@ func handleConn(conn net.Conn, chain *Chain, checkpointConfig CheckpointServerCo
 			return
 		}
 		writeJSON(conn, rotResult)
+	case "query":
+		queryResult, err := queryForIPC(req, chain)
+		if err != nil {
+			writeJSON(conn, errShape(queryIPCErrorCode(err), err.Error()))
+			return
+		}
+		writeQueryJSON(conn, queryResult)
 	default:
 		writeJSON(conn, errShape("unknown_op", "unsupported op"))
 	}
