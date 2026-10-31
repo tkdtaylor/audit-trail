@@ -15,9 +15,9 @@ picked up* ([decisions/](architecture/decisions/)), then a decomposition into ta
 
 ```
 checkpoints ✅ ──► witness / Rekor anchoring ✅   (anchoring needs something to anchor)
-              └─► log rotation / checkpointing    (rotation re-anchors at segment boundaries)
+              └─► log rotation / checkpointing ✅  (rotation re-anchors at segment boundaries)
 
-indexed query API        (independent — additive)
+indexed query API ✅     (independent: additive)
 pluggable backends       (independent — but do last; highest abstraction-leak risk)
 ```
 
@@ -27,8 +27,8 @@ pluggable backends       (independent — but do last; highest abstraction-leak 
 |---|---|---|---|---|
 | **Signed checkpoints** (RFC 6962 STH) | ✅ shipped — [ADR-003](architecture/decisions/003-signed-checkpoints.md), tasks 004–008 (`checkpoint*.go`), FF-006 wired | — | 🔴 high | Touches the integrity core: key management, signature format, and *what exactly* gets signed. Get the signed-tree-head shape wrong and every downstream anchor inherits it. |
 | **Witness / Rekor anchoring** | ✅ shipped — [ADR-004](architecture/decisions/004-witness-anchoring.md), tasks 009–013 (`rekor*.go`), anchor fitness wired | checkpoints | 🟠 med | External trust + network failure modes. Must degrade safely — an unreachable witness cannot block or weaken local `emit`/`verify`. |
-| **Log rotation / checkpointing** | ❌ not started | checkpoints | 🔴 high | Interacts with two load-bearing invariants: `Verify()` reads from disk, and the single-writer mutex. A rotation boundary is a seam where tamper-detection can silently break. |
-| **Indexed query API** | ❌ not started | — | 🟢 low | Additive, read-only. Must not become a second writer or bypass `Verify()`'s disk read. |
+| **Log rotation / checkpointing** | ✅ shipped - [ADR-005](architecture/decisions/005-log-rotation.md), tasks 014-018 (multi-segment rotation, cross-segment verification; `segment*.go`, `rotation*.go`), FF-010/FF-011 wired | checkpoints | 🔴 high | Interacts with two load-bearing invariants: `Verify()` reads from disk, and the single-writer mutex. A rotation boundary is a seam where tamper-detection can silently break. |
+| **Indexed query API** | ✅ shipped - [ADR-006](architecture/decisions/006-indexed-query-api.md), task 020 (cross-segment query, filtering, pagination; `query*.go`) | - | 🟢 low | Additive, read-only. Must not become a second writer or bypass `Verify()`'s disk read. |
 | **Pluggable backends** (Rekor / immudb / Postgres / SQLite) | ❌ not started | — | 🟠 med | The contract fights to keep backend specifics *out* of emit/verify. This is the item most likely to leak abstraction into the frozen seam — do it last, when the seam is well-exercised. |
 
 ## Discipline

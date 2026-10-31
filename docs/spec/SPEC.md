@@ -70,12 +70,22 @@ detect, prevent, or alert. Go, standard library only.
 - **State is derived from disk.** `seq` and `prev_hash` are reconstructed by replaying the log
   on open, so the chain resumes across restarts and across processes. (chain.go `loadState`)
 
+## Capability status
+
+| Capability | Status | Reference |
+|---|---|---|
+| **Core emit and verify** | ✅ complete | [behaviors.md](behaviors.md), [interfaces.md](interfaces.md) |
+| **Signed checkpoints** (RFC 6962 STH) | ✅ complete | [ADR-003](../architecture/decisions/003-signed-checkpoints.md), tasks 004-008 |
+| **Witness / Rekor anchoring** | ✅ complete | [ADR-004](../architecture/decisions/004-witness-anchoring.md), tasks 009-013 |
+| **Log rotation / checkpointing** | ✅ complete | [ADR-005](../architecture/decisions/005-log-rotation.md), tasks 014-018 |
+| **Indexed query API** | ✅ complete | [ADR-006](../architecture/decisions/006-indexed-query-api.md), task 020 |
+| **Pluggable backends** | ❌ not started | [ROADMAP.md](../ROADMAP.md) |
+
 ## Non-goals
 
 - **Not telemetry / observability.** No metrics, no alerting, no detection. It records facts.
 - **Not access control.** It does not authenticate or authorize emitters (file/socket perms
   are the only gate).
-- **Float support in audited events** — deliberately out of scope to keep canonicalization exact.
-- **Not (yet) cryptographically signed or anchored.** Signed checkpoints, witness/Rekor
-  anchoring, rotation, query API, and pluggable backends are v1+ roadmap, behind the
-  emit/verify seam — see ADR-001.
+- **Float support in audited events:** deliberately out of scope to keep canonicalization exact.
+- **Pluggable backends:** Pluggable storage backends (Rekor, immudb, Postgres, SQLite)
+  remain on the v1+ roadmap behind the emit/verify seam (see ADR-001).

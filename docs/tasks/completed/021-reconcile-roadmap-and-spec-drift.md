@@ -2,7 +2,7 @@
 
 **Project:** audit-trail
 **Created:** 2026-10-31
-**Status:** ready
+**Status:** completed
 
 ## Goal
 
@@ -34,9 +34,9 @@ Tasks 014 through 018 implemented tamper-evident multi-segment log rotation (`au
 
 ## Acceptance criteria
 
-- [ ] [REQ-021-01] TC-021-01: `docs/ROADMAP.md` marks log rotation and indexed query API as `✅`.
-- [ ] [REQ-021-02] TC-021-02: `docs/spec/SPEC.md` marks log rotation and indexed query API as `✅`.
-- [ ] [REQ-021-03] TC-021-03: `go test -race -v -run TestTC021 ./... && make check` passes.
+- [x] [REQ-021-01] TC-021-01: `docs/ROADMAP.md` marks log rotation and indexed query API as `✅`.
+- [x] [REQ-021-02] TC-021-02: `docs/spec/SPEC.md` marks log rotation and indexed query API as `✅`.
+- [x] [REQ-021-03] TC-021-03: `go test -race -v -run TestTC021 ./... && make check` passes.
 
 ## Verification plan
 
