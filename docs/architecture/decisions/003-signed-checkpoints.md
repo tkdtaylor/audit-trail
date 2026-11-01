@@ -208,7 +208,7 @@ such as `checkpoint_not_configured`. All IPC errors keep the shared
 - [ADR-002](002-enforce-no-float-audit-values.md) - no-float audited values and JCS subset.
 - [docs/CONTRACT.md](../../CONTRACT.md) - frozen v1 emit/verify contract.
 - [docs/spec/interfaces.md](../../spec/interfaces.md) - current CLI and IPC surface.
-- [docs/tasks/backlog/005-checkpoint-payload-core.md](../../tasks/backlog/005-checkpoint-payload-core.md)
-- [docs/tasks/backlog/006-sign-and-verify-checkpoints.md](../../tasks/backlog/006-sign-and-verify-checkpoints.md)
-- [docs/tasks/backlog/007-checkpoint-runtime-surface.md](../../tasks/backlog/007-checkpoint-runtime-surface.md)
-- [docs/tasks/backlog/008-checkpoint-fitness-and-fixtures.md](../../tasks/backlog/008-checkpoint-fitness-and-fixtures.md)
+- [docs/tasks/completed/005-checkpoint-payload-core.md](../../tasks/completed/005-checkpoint-payload-core.md)
+- [docs/tasks/completed/006-sign-and-verify-checkpoints.md](../../tasks/completed/006-sign-and-verify-checkpoints.md)
+- [docs/tasks/completed/007-checkpoint-runtime-surface.md](../../tasks/completed/007-checkpoint-runtime-surface.md)
+- [docs/tasks/completed/008-checkpoint-fitness-and-fixtures.md](../../tasks/completed/008-checkpoint-fitness-and-fixtures.md)

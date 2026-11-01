@@ -34,10 +34,14 @@ no separate database, queue, or service.
 
 | Component | File | Responsibility | Depends on |
 |-----------|------|----------------|------------|
-| CLI | [main.go](../../main.go) | `serve`/`emit`/`verify` dispatch, flag parsing, JSON output, exit codes | Chain core |
-| IPC server | [ipc.go](../../ipc.go) | Unix-socket listener, `{op}` dispatch, error shape | Chain core |
+| CLI | [main.go](../../main.go) | `serve`/`emit`/`verify`/`checkpoint`/`rotate`/`query` dispatch, flag parsing, JSON output, exit codes | Chain core, Checkpoints, Rekor client, Log rotation, Query engine |
+| IPC server | [ipc.go](../../ipc.go) | Unix-socket listener, `{op}` dispatch (`emit`, `verify`, `ping`, `checkpoint_*`, `rotate`, `query`), error shape | Chain core, Checkpoints, Log rotation, Query engine |
 | Chain core | [chain.go](../../chain.go) | `Emit`, `Verify`, `loadState`, `hashRecord`; mutex; the integrity logic | Canonicalizer, `crypto/sha256`, `os` |
 | Canonicalizer | [canonical.go](../../canonical.go) | RFC 8785 / JCS encoding | `encoding/json` |
+| Checkpoints | [checkpoint.go](../../checkpoint.go) | Signed checkpoints (RFC 6962 STH), key parsing, signature verification | Canonicalizer, `crypto/ed25519` |
+| Rekor client | [rekor.go](../../rekor.go) | Rekor transparency log client, offline receipt verification | Canonicalizer, `crypto/sha256`, `net/http` |
+| Log rotation | [segment.go](../../segment.go) | Segment sealing, manifest tracking, cross-segment verification | Chain core, Checkpoints, `os` |
+| Query engine | [query.go](../../query.go) | Filtered read-only search across all segments, pagination | Chain core, `encoding/json` |
 
 ## Cross-cutting decisions
 

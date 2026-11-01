@@ -54,4 +54,4 @@ Records returned are the raw on-disk line bytes (`json.RawMessage`), never re-ma
 - [ADR-005](005-log-rotation.md) - segment/manifest model that `query` walks across.
 - [docs/CONTRACT.md](../../CONTRACT.md) - frozen v1 `emit`/`verify` contract (unchanged).
 - [docs/ROADMAP.md](../../ROADMAP.md) - indexed query API roadmap item.
-- [docs/tasks/backlog/020-indexed-query-api.md](../../tasks/backlog/020-indexed-query-api.md)
+- [docs/tasks/completed/020-indexed-query-api.md](../../tasks/completed/020-indexed-query-api.md)

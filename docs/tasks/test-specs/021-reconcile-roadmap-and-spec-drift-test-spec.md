@@ -1,6 +1,6 @@
 # Test Spec 021: Reconcile ROADMAP and SPEC drift for log rotation and indexed query API
 
-**Linked task:** [`docs/tasks/backlog/021-reconcile-roadmap-and-spec-drift.md`](../backlog/021-reconcile-roadmap-and-spec-drift.md)
+**Linked task:** [`docs/tasks/completed/021-reconcile-roadmap-and-spec-drift.md`](../completed/021-reconcile-roadmap-and-spec-drift.md)
 **Written:** 2026-10-31
 **Status:** ready for implementation
 

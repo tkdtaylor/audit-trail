@@ -14,8 +14,8 @@ integrity is verifiable without an external oracle, and whose contract is frozen
 across all blocks that depend on it. Part of the
 [Secure Agent Ecosystem](#ecosystem-blocks), Apache-2.0 licensed.
 
-> **Status.** v1 contract (frozen); emit, verify, checkpoint, and rotate all working
-> and tested. Signed checkpoints (RFC 6962 STH) and Rekor anchoring (v1+) are shipped.
+> **Status.** v1 contract (frozen); emit, verify, checkpoint, rotate, and query all working
+> and tested. Signed checkpoints (RFC 6962 STH), Rekor anchoring (v1+), and indexed query API (Task 020) are shipped.
 > See [docs/CONTRACT.md](docs/CONTRACT.md).
 
 ## Contents
@@ -86,6 +86,7 @@ witness anchoring, and rotation are optional layers behind the contract seam.
 | `verify` | Walk the chain from disk and check every hash. Exits nonzero if tampering detected. | `audit-trail verify --logfile audit.log` |
 | `checkpoint` | Create a signed checkpoint (RFC 6962 STH) at the current position. Optional; requires a signing key. | `audit-trail checkpoint create --logfile audit.log --log-id prod --signing-key key.pem` |
 | `rotate` | Seal the current segment and start a new one. All segments verify independently; cross-segment verify stitches them. | `audit-trail rotate --logfile audit.log --log-id prod --signing-key key.pem` |
+| `query` | Filtered, read-only scan of events across all segments. Returns matches and verification status (`query.go`). | `audit-trail query --logfile audit.log --actor vault --limit 10` |
 | `serve` | Run the IPC daemon on a Unix socket (the hot path for agent-builder). | `audit-trail serve --socket /run/audit.sock --logfile audit.log` |
 
 See [docs/spec/behaviors.md](docs/spec/behaviors.md) for the complete behavior spec;

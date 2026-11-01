@@ -23,14 +23,18 @@ doesn't reconcile.
 
 ## Component map
 
-Single Go package (`package main`), flat layout. Four source files, each one responsibility:
+Single Go package (`package main`), flat layout. Source files, each with focused responsibilities:
 
 | File | Responsibility |
 |------|----------------|
-| [chain.go](../../chain.go) | The `Chain` type — the integrity core. `Emit` appends one record and returns `{seq, hash}`; `Verify` walks the on-disk chain; `loadState` resumes `seq`/`prevHash` from disk on open. Holds the only mutable state and the mutex. |
-| [canonical.go](../../canonical.go) | `canonical()` — RFC 8785 (JCS) encoding via `encoding/json` with HTML-escaping disabled. The byte-exactness here is what makes hashes reproducible across processes. |
-| [ipc.go](../../ipc.go) | `serve()` + `handleConn()` — newline-delimited JSON over a Unix socket. Translates `{op}` requests to `Chain` calls; emits the shared `{error:{code,message,retryable}}` shape on failure. |
-| [main.go](../../main.go) | CLI dispatch (`serve`/`emit`/`verify`), flag parsing, JSON output. `verify` exits non-zero on tamper. |
+| [chain.go](../../chain.go) | The `Chain` type: the integrity core. `Emit` appends one record and returns `{seq, hash}`; `Verify` walks the on-disk chain; `loadState` resumes `seq`/`prevHash` from disk on open. Holds the only mutable state and the mutex. |
+| [canonical.go](../../canonical.go) | `canonical()`: RFC 8785 (JCS) encoding via `encoding/json` with HTML-escaping disabled. The byte-exactness here is what makes hashes reproducible across processes. |
+| [ipc.go](../../ipc.go) | `serve()` + `handleConn()`: newline-delimited JSON over a Unix socket. Translates `{op}` requests (`emit`, `verify`, `ping`, `checkpoint_*`, `rotate`, `query`) to core calls; emits the shared `{error:{code,message,retryable}}` shape on failure. |
+| [main.go](../../main.go) | CLI dispatch (`serve`/`emit`/`verify`/`checkpoint`/`rotate`/`query`), flag parsing, JSON output. `verify` exits non-zero on tamper. |
+| [checkpoint.go](../../checkpoint.go) | RFC 6962 STH checkpoint payload creation, signing, key parsing, and signature verification (`crypto/ed25519`). |
+| [rekor.go](../../rekor.go) | Rekor transparency log integration: payload hashing, inclusion proof verification, and offline receipt checks. |
+| [segment.go](../../segment.go) | Log rotation: sealing active segments, writing manifests, and cross-segment verification. |
+| [query.go](../../query.go) | `runQuery`: read-only filtered cross-segment scans, pagination tokens, and unverified-log passthrough. |
 
 ## Data flow
 
@@ -51,9 +55,9 @@ verify (CLI exit-code / IPC):
                                        ──►  {valid, tamper_detected_at, message}
 ```
 
-Two transports drive the same two verbs:
-- **CLI** ([main.go](../../main.go)) — `emit`/`verify`, standalone & CI-friendly.
-- **Unix-socket IPC** ([ipc.go](../../ipc.go)) — `{"op":"emit"|"verify"|"ping"}`, the hot path for live blocks.
+Two transports drive operations across the chain:
+- **CLI** ([main.go](../../main.go)): `emit`, `verify`, `checkpoint`, `rotate`, `query`, standalone and CI-friendly.
+- **Unix-socket IPC** ([ipc.go](../../ipc.go)): operations `emit`, `verify`, `ping`, `checkpoint_create`, `checkpoint_verify`, `rotate`, and `query`, the hot path for live blocks.
 
 ## Key dependencies
 
@@ -64,9 +68,12 @@ socket). No third-party modules in [go.mod](../../go.mod).
 
 ## Entry points
 
-- `audit-trail serve --socket <path> --logfile <path>` — long-lived IPC daemon.
-- `audit-trail emit --logfile <path> --actor … --action … --target … [--decision …]` — one event.
-- `audit-trail verify --logfile <path>` — walk the chain; exit 1 on tamper.
+- `audit-trail serve --socket <path> --logfile <path>`: long-lived IPC daemon.
+- `audit-trail emit --logfile <path> --actor ... --action ... --target ... [--decision ...]`: one event.
+- `audit-trail verify --logfile <path>`: walk the chain; exit 1 on tamper.
+- `audit-trail checkpoint <create|verify|anchor|verify-anchor> ...`: create, verify, or anchor signed checkpoints.
+- `audit-trail rotate --logfile <path> --log-id <id> --signing-key <key> --rotate-after <N>`: seal the active segment and rotate.
+- `audit-trail query --logfile <path> [--actor ...] [--limit N]`: read-only filtered event query.
 
 ## Key decisions (observed in code)
 

@@ -9,7 +9,7 @@ controlled by CLI flags ([main.go](../../main.go)).
 
 | Flag | Subcommands | Default | Meaning |
 |------|-------------|---------|---------|
-| `--logfile` | serve, emit, verify, rotate | `audit.log` | Path to the JSONL chain. Created `0600` if absent. |
+| `--logfile` | serve, emit, verify, rotate, query | `audit.log` | Path to the JSONL chain. Created `0600` if absent. |
 | `--socket` | serve | *(required)* | Unix socket path. Stale socket is removed, then `chmod 0600`. |
 | `--checkpoint-log-id` | serve | `""` | Stable log identifier used by IPC `checkpoint_create` and `rotate`; required with `--checkpoint-signing-key` for those ops. |
 | `--checkpoint-signing-key` | serve | `""` | PEM Ed25519 private key path used by IPC `checkpoint_create` and `rotate`; clients do not send key paths per request. |
@@ -17,10 +17,16 @@ controlled by CLI flags ([main.go](../../main.go)).
 | `--rotate-after` | serve, rotate | `0` (disabled) | Event-count rotation threshold. For `serve`: enables the IPC `{"op":"rotate"}` operation when > 0 (also requires `--checkpoint-log-id` and `--checkpoint-signing-key`). For `rotate` CLI: required, must be > 0. When the active segment holds at least this many records, `Rotate()` archives it; below threshold it no-ops (`{"rotated":false}`). |
 | `--rekor-url` | serve, checkpoint anchor, checkpoint verify-anchor | `""` | Rekor transparency log server URL. Triggers online verification for `checkpoint verify-anchor`. |
 | `--rekor-public-key` | serve, checkpoint verify-anchor | `""` | PEM public key path for the Rekor log server. |
-| `--actor` | emit | `""` | Event `actor`. |
-| `--action` | emit | `""` | Event `action`. |
-| `--target` | emit | `""` | Event `target`. |
-| `--decision` | emit | `""` | Event `decision`; omitted from the event when empty. |
+| `--actor` | emit, query | `""` | Event `actor` for `emit`; exact-match filter for `query`. |
+| `--action` | emit, query | `""` | Event `action` for `emit`; exact-match filter for `query`. |
+| `--target` | emit, query | `""` | Event `target` for `emit`; exact-match filter for `query`. |
+| `--decision` | emit, query | `""` | Event `decision` for `emit` (omitted when empty); exact-match filter for `query`. |
+| `--seq-min` | query | `""` | Inclusive minimum sequence number filter (`int64`). |
+| `--seq-max` | query | `""` | Inclusive maximum sequence number filter (`int64`). |
+| `--ts-min` | query | `""` | Inclusive minimum timestamp filter in Unix seconds (`int64`). |
+| `--ts-max` | query | `""` | Inclusive maximum timestamp filter in Unix seconds (`int64`). |
+| `--limit` | query | `100` | Maximum number of results to return (range `1..1000`). |
+| `--token` | query | `""` | Opaque continuation token for cursor-based pagination. |
 | `--log-id` | checkpoint create, rotate | *(required)* | Stable log identifier included in the signed checkpoint payload. |
 | `--signing-key` | checkpoint create, rotate | *(required)* | PEM-wrapped PKCS #8 Ed25519 private key used to sign checkpoint payload bytes. |
 | `--out` | checkpoint create, checkpoint anchor | `""` | Optional checkpoint/receipt JSON output path; stdout is used when omitted. |

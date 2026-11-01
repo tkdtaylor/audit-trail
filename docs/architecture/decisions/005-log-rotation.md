@@ -303,7 +303,7 @@ Later tasks must provide the following test evidence:
 - [ADR-004](004-witness-anchoring.md) — Rekor anchoring (asynchronous, out of scope for rotation).
 - [docs/CONTRACT.md](../../CONTRACT.md) — frozen v1 emit/verify contract (unchanged).
 - [docs/spec/configuration.md](../../spec/configuration.md) — rotation threshold default (task 017).
-- [docs/tasks/backlog/015-segment-and-manifest-core.md](../../tasks/backlog/015-segment-and-manifest-core.md)
-- [docs/tasks/backlog/016-cross-segment-verify.md](../../tasks/backlog/016-cross-segment-verify.md)
-- [docs/tasks/backlog/017-rotation-runtime-surface.md](../../tasks/backlog/017-rotation-runtime-surface.md)
-- [docs/tasks/backlog/018-rotation-fitness-and-fixtures.md](../../tasks/backlog/018-rotation-fitness-and-fixtures.md)
+- [docs/tasks/completed/015-segment-and-manifest-core.md](../../tasks/completed/015-segment-and-manifest-core.md)
+- [docs/tasks/completed/016-cross-segment-verify.md](../../tasks/completed/016-cross-segment-verify.md)
+- [docs/tasks/completed/017-rotation-runtime-surface.md](../../tasks/completed/017-rotation-runtime-surface.md)
+- [docs/tasks/completed/018-rotation-fitness-and-fixtures.md](../../tasks/completed/018-rotation-fitness-and-fixtures.md)

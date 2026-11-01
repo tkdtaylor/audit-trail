@@ -47,8 +47,8 @@ go test ./...                     # run tests (or: make test)
 go fmt ./...                      # format (or: make fmt)
 ```
 
-`go build ./...` and `go test ./...` must stay green. A `make fitness` umbrella
-target does not exist yet; adding the first fitness rule means adding it (see
+`go build ./...` and `go test ./...` must stay green. `make fitness` (and `make check`)
+runs the 11 fitness checks (`FF-001` through `FF-011`) (see
 [docs/spec/fitness-functions.md](docs/spec/fitness-functions.md)).
 
 ## Conventions
